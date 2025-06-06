@@ -6,6 +6,8 @@ NVIDIA CUDA Toolkit. By using NVBit you agree to End User License Agreement
 described in the EULA.txt file.
 
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
+
+This repository is meant as a tutorial for learning NVBit. Along with the core library in `core/`, the `tools/` directory contains several example instrumentation tools. Every tool includes a blog-style README that walks through the code, explains the build process, and describes how to interpret the output.
 ## Introduction
 NVBit (NVidia Binary Instrumentation Tool) is a research prototype of a dynamic
 binary instrumentation library for NVIDIA GPUs.
