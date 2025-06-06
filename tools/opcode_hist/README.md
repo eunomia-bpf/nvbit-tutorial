@@ -1,26 +1,25 @@
 # opcode_hist
 
-Generates a histogram of executed instruction opcodes.  For each kernel
-launch the tool prints the total number of instructions followed by a
-count for every opcode encountered.
+`opcode_hist` builds a histogram of executed opcodes for each kernel launch. It shows how you can use NVBit to collect per-opcode statistics on the GPU.
 
-## How it works
+## Source Files
+- `opcode_hist.cu` – host side code that inserts calls before every instruction and prints the histogram on kernel completion.
+- `inject_funcs.cu` – device function `count_instrs` that updates the histogram in managed memory.
 
-`opcode_hist.cu` instruments every instruction and passes an opcode ID to
-the `count_instrs` device function.  A per-opcode counter stored in
-managed memory is incremented from the device.  When a kernel finishes
-the host code prints the histogram and accumulates a global instruction
-count.
+## Instrumentation Flow
+1. All instructions in the selected range have a call to `count_instrs` inserted before them. The host assigns each opcode a small integer ID which is passed as an argument.
+2. On the device an array `histogram` is indexed by that ID. Each warp (or each thread depending on `COUNT_WARP_LEVEL`) performs an atomic add to increment its opcode slot.
+3. After the kernel finishes the host prints the total dynamic instruction count followed by the non-zero entries of the histogram.
 
 ## Building
-
-Run `make` here or from the `tools` directory.
+Run `make` in this directory or `make -C tools`.
 
 ## Running
+Example invocation:
 
 ```bash
 LD_PRELOAD=./tools/opcode_hist/opcode_hist.so ./test-apps/vectoradd/vectoradd
 ```
 
-The output lists the instruction counts for each opcode executed within
-the kernel.
+## Interpreting Results
+The output lists, for each kernel, the number of times each opcode executed. This can be useful for coarse-grained profiling or spotting unexpected instructions.

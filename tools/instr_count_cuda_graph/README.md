@@ -1,29 +1,25 @@
 # instr_count_cuda_graph
 
-Extension of the instruction counter that supports kernels launched
-through CUDA graphs.  Each kernel receives its own counter so graphs
-containing multiple launches can be tracked accurately.
+This variant of the instruction counter supports CUDA Graphs. Every launched kernel, whether part of a graph capture or a normal launch, has its own counter so graph executions can be profiled accurately.
 
-## How it works
+## Source Files
+- `instr_count_cuda_graph.cu` – host code that handles graph related callbacks and manages per-kernel counters.
+- `inject_funcs.cu` – device function `count_instrs` used by all kernels.
 
-`instr_count_cuda_graph.cu` instruments kernels similarly to
-`instr_count` but maintains a map of kernels to counters and handles
-callbacks for CUDA graph APIs.  When graph nodes are launched the tool
-prints per-kernel instruction counts using data collected in managed
-memory.
+## Instrumentation Flow
+1. **Per-kernel counters** – A map associates each `CUfunction` with an index in the managed array `kernel_counter`. During capture or graph node creation the kernel is instrumented and the pointer to its counter is passed to the injected call.
+2. **Handling graph APIs** – The CUDA callback intercepts `cudaGraphAddKernelNode`, stream capture launches and graph launches. Counters are printed after a graph completes.
+3. **Standard launches** – Regular kernel launches are instrumented in the same way as `instr_count` and synchronized at exit.
 
 ## Building
-
-Compile with `make` in this directory or from the top `tools` folder.
+Run `make` here or `make -C tools` if you wish to build all examples.
 
 ## Running
-
-Preload `instr_count_cuda_graph.so` before executing a CUDA application
-that uses graphs:
+Use LD_PRELOAD with an application that uses CUDA graphs:
 
 ```bash
 LD_PRELOAD=./tools/instr_count_cuda_graph/instr_count_cuda_graph.so ./app
 ```
 
-The output lists each kernel ID along with its dynamic instruction count
-just like the original `instr_count` tool.
+## Interpreting Results
+Each line identifies the kernel ID and total number of dynamic instructions executed. When graphs launch multiple kernels simultaneously each counter is printed separately so you can understand the cost of each node.

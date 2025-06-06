@@ -1,26 +1,26 @@
 # mem_trace
 
-Traces memory accesses performed by each kernel.  Addresses for each
-warp are sent from the GPU to the host via an NVBit channel and printed
-on the CPU.
+`mem_trace` records the memory addresses accessed by each instruction. The addresses for all 32 lanes of a warp are collected on the device and streamed back to the host so they can be printed or analysed.
 
-## How it works
+## Source Files
+- `mem_trace.cu` – host side implementation handling CUDA callbacks and receiving channel messages.
+- `inject_funcs.cu` – device function `instrument_mem` gathers addresses across the warp and sends a `mem_access_t` structure.
+- `common.h` – definition of the structure used to transfer one warp's memory access.
 
-The tool instruments every memory reference instruction (except constant
-and non-memory operations).  `instrument_mem` in `inject_funcs.cu`
-collects the addresses touched by all threads in a warp and pushes the
-data to a channel.  A host thread receives the data and formats a line of
-text for each memory instruction executed.
+## Instrumentation Flow
+1. During instrumentation every memory reference instruction (excluding constant space) is given a call to `instrument_mem`. The opcode is mapped to a small integer ID so the host can decode it.
+2. `instrument_mem` uses `__shfl_sync` to read the address from each lane and stores them in an array along with CTA and warp information. The first active lane pushes the structure onto the channel.
+3. A dedicated host thread receives the structures and prints a human readable line containing the grid launch ID, CTA coordinates, warp ID, opcode name and the 32 collected addresses.
 
 ## Building
-
-Run `make` in this directory or from the main `tools` folder.
+Run `make` in this directory or `make -C tools` to compile all tools. Ensure that the CUDA toolkit is installed.
 
 ## Running
+Launch your program with:
 
 ```bash
 LD_PRELOAD=./tools/mem_trace/mem_trace.so ./test-apps/vectoradd/vectoradd
 ```
 
-Each reported line includes the CTA, warp ID, opcode and the 32 addresses
-accessed by the warp.
+## Interpreting Results
+Each output line begins with the context and launch ID followed by CTA and warp identifiers. It then prints the opcode and the 32 addresses touched by that warp for that instruction. This data can be post-processed to analyse memory access patterns.

@@ -7,11 +7,7 @@ described in the EULA.txt file.
 
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
 
-This repository serves as a tutorial companion to NVBit.  In addition to the
-core library located in the `core/` directory it contains a collection of sample
-instrumentation tools under `tools/`.  Each tool folder now provides a README
-that explains how the example works and how to run it so newcomers can quickly
-learn how to build their own NVBit tools.
+This repository is meant as a tutorial for learning NVBit. Along with the core library in `core/`, the `tools/` directory contains several example instrumentation tools. Every tool includes a blog-style README that walks through the code, explains the build process, and describes how to interpret the output.
 ## Introduction
 NVBit (NVidia Binary Instrumentation Tool) is a research prototype of a dynamic
 binary instrumentation library for NVIDIA GPUs.
