@@ -1,0 +1,13 @@
+*.o
+*.so
+*.ll
+*.bc
+*.llc
+*.llc.s
+*.llc.s.o
+*.llc.s.o.llc
+*.llc.s.o.llc.s
+*.llc.s.o.llc.s.o
+*.llc.s.o.llc.s.o.llc
+*.llc.s.o.llc.s.o.llc.s
+/test-apps/vectoradd/vectoradd
