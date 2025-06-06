@@ -1,5 +1,6 @@
-# NVBit (NVidia Binary Instrumentation Tool)
-NVIDIA Corporation
+# NVBit Tutorial: Comprehensive Guide to GPU Binary Instrumentation
+
+This repository provides a comprehensive, blog-style tutorial for learning NVIDIA Binary Instrumentation Tool (NVBit). It offers detailed, step-by-step guidance with in-depth explanations of code to help you understand GPU binary instrumentation concepts and techniques.
 
 NVBit is covered by the same End User License Agreement as that of the
 NVIDIA CUDA Toolkit. By using NVBit you agree to End User License Agreement
@@ -7,9 +8,40 @@ described in the EULA.txt file.
 
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
 
-This repository is meant as a tutorial for learning NVBit. Along with the core library in `core/`, the `tools/` directory contains several example instrumentation tools. Every tool includes a blog-style README that walks through the code, explains the build process, and describes how to interpret the output.
-## Introduction
-NVBit (NVidia Binary Instrumentation Tool) is a research prototype of a dynamic
+## About This Tutorial Repository
+
+This tutorial repository goes beyond basic examples to provide:
+
+- **Detailed Blog-Style Documentation** for each tool with comprehensive code explanations
+- **Step-by-Step Implementation Guides** showing how each tool is built
+- **Visual Diagrams and Examples** to illustrate key concepts
+- **Best Practices and Performance Considerations**
+- **Extension Ideas** for developing your own custom tools
+
+The repository contains:
+
+- **Core NVBit Library** (`core/`) - The main NVBit library and header files
+- **Example Tools** (`tools/`) - A collection of practical instrumentation tools with detailed explanations
+- **Test Applications** (`test-apps/`) - Simple CUDA applications to demonstrate the tools
+
+Each tool in the `tools/` directory includes a comprehensive tutorial README that walks through the code line-by-line, explains the build process, and describes how to interpret the output.
+
+## Learning Path
+
+The tools are organized in order of increasing complexity to provide a structured learning experience:
+
+1. **instr_count**: Learn the basics of CUDA instrumentation by counting instructions
+2. **opcode_hist**: Understand instruction mix analysis with opcode histograms
+3. **instr_count_bb**: Improve performance with basic block instrumentation
+4. **mov_replace**: Modify kernel behavior by replacing instructions
+5. **mem_trace**: Track memory access patterns with sophisticated data collection
+6. **mem_printf2**: Implement GPU-to-CPU communication for debugging
+7. **record_reg_vals**: Analyze register values during execution
+8. **instr_count_cuda_graph**: Handle modern CUDA features like CUDA graphs
+
+## Introduction to NVBit
+
+NVBit (NVIDIA Binary Instrumentation Tool) is a research prototype of a dynamic
 binary instrumentation library for NVIDIA GPUs.
 
 NVBit provides a set of simple APIs that enable writing a variety of
@@ -47,127 +79,93 @@ used (i.e. nvcc, pgicc, etc).
 
 ## Getting Started with NVBit
 
-NVBit is provided in a .tgz file containing this README file and three folders:
+NVBit is provided in this repository with the following structure:
 1. A ```core``` folder, which contains the main static library
 ```libnvbit.a``` and various headers files (among which the ```nvbit.h```
 file which contains all the main NVBit APIs declarations).
 2. A ```tools``` folder, which contains various source code examples of NVBit
-tools. A new user of NVBit, after familiarizing with these pre-existing tools
-will typically make a copy of one of them and modify appropriately.
+tools with detailed tutorial documentation. After learning from these examples, you can make a copy of one and modify it to create your own tool.
 3. A ```test-apps``` folder, which contains a simple application that can be
-used to test NVBit tools. There is nothing special about this application, it
-is a simple vector addition program.
+used to test NVBit tools. It features a simple vector addition program.
 
+## Building the Tools and Test Applications
 
-To compile the NVBit tools simply type ```make``` from  inside the ```tools```
-folder (make sure ```nvcc``` is in your PATH).
-Compile the test application by typing ```make``` inside the ```test-apps```
-folder.
-__Note__: if you are making your own tool, make sure you link it to c++
+To compile the NVBit tools:
+```bash
+cd tools
+make
+```
+
+To compile the test application:
+```bash
+cd test-apps
+make
+```
+
+**Note**: When creating your own tool, make sure you link it to the C++
 standard library, which is required by NVBit, otherwise, you might see
-missing symbol errors. ```nvcc``` does it by default, but if you specify
+missing symbol errors. ```nvcc``` does this by default, but if you specify
 your own host compiler using ```nvcc -ccbin=<compiler>```, you need to point
-to a c++ compiler or add ```-lstdc++```.
+to a C++ compiler or add ```-lstdc++```.
 
-## Using an NVBit tool
+## Using an NVBit Tool
 
 Before running an NVBit tool, make sure ```nvdisasm``` is in your PATH. In
-Ubuntu distributions this is typically done by adding /usr/local/cuda/bin or
-/usr/local/cuda-"version"/bin to the PATH environment variable.
+Ubuntu distributions, this is typically done by adding `/usr/local/cuda/bin` or
+`/usr/local/cuda-"version"/bin` to the PATH environment variable.
 
-To use an NVBit tool we simply LD_PRELOAD the tool before the application
-execution command. Alternatively, you can use CUDA_INJECTION64_PATH instead
-if LD_PRELOAD does not work for you. Because some workloads, such as pytorch
-would overwrite LD_PRELOAD internally, making the NVBit tool not loaded.
+To use an NVBit tool, you can either:
 
-NOTE: NVBit uses the same mechanism as nvprof, nsight system, and nsight compute,
-thus they cannot be used together.
-
-For instance if the application vector add runs natively as:
-
-```
-./test-apps/vectoradd/vectoradd
-```
-
-and produces the following output:
-
-```
-Final sum = 100000.000000; sum/n = 1.000000 (should be ~1)
-```
-
-we would use the NVBit tool which performs instruction count as follow:
-
-```
+1. LD_PRELOAD the tool before the application command:
+```bash
 LD_PRELOAD=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 ```
 
-or
-```
+2. Or use CUDA_INJECTION64_PATH:
+```bash
 CUDA_INJECTION64_PATH=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 ```
 
-The output for this command should be the following:
+**NOTE**: NVBit uses the same mechanism as nvprof, nsight system, and nsight compute,
+thus they cannot be used together.
 
-```no-highlight
-------------- NVBit (NVidia Binary Instrumentation Tool) Loaded --------------
-NVBit core environment variables (mostly for nvbit-devs):
-            NVDISASM = nvdisasm - override default nvdisasm found in PATH
-            NOBANNER = 0 - if set, does not print this banner
------------------------------------------------------------------------------
-         INSTR_BEGIN = 0 - Beginning of the instruction interval where to apply instrumentation
-           INSTR_END = 4294967295 - End of the instruction interval where to apply instrumentation
-        KERNEL_BEGIN = 0 - Beginning of the kernel launch interval where to apply instrumentation
-          KERNEL_END = 4294967295 - End of the kernel launch interval where to apply instrumentation
-    COUNT_WARP_LEVEL = 1 - Count warp level or thread level instructions
-    EXCLUDE_PRED_OFF = 0 - Exclude predicated off instruction from count
-        TOOL_VERBOSE = 0 - Enable verbosity inside the tool
-----------------------------------------------------------------------------------------------------
-kernel 0 - vecAdd(double*, double*, double*, int) - #thread-blocks 98,  kernel instructions 50077, total instructions 50077
-Final sum = 100000.000000; sum/n = 1.000000 (should be ~1)
-```
+## Key Concepts Covered in This Tutorial
 
-As we can see, before the original output, there is a print showing the kernel
-call index "0", the kernel function prototype
-"vecAdd(double*, double*, double*, int)", total number of thread blocks launched
- in this kernel "98", the number of executed instructions in the kernel "50077",
- and for the all application "50077".
+Throughout the tutorial, you'll learn important concepts in GPU binary instrumentation:
 
-When the application starts, also two banners are printed showing the environment
-variables (and their current values) that can be used to control the NVBit core
-or the specific NVBit Tool.
-Mostly of the NVBit core environment variable are used for core
-debugging/development purposes.
-Set the environment value NOBANNER=1 to disable the core banner if that
-information is not wanted.
+1. **SASS Instruction Analysis** - Understanding GPU assembly instructions
+2. **Function Instrumentation** - Adding code to existing GPU functions
+3. **Basic Block Analysis** - Working with control flow graphs
+4. **Memory Access Tracking** - Capturing and analyzing memory patterns
+5. **Efficient Communication** - Moving data between GPU and CPU
+6. **Register Manipulation** - Reading and writing GPU registers directly
+7. **Instruction Replacement** - Modifying the behavior of GPU code
+8. **Performance Optimization** - Minimizing instrumentation overhead
 
-### Examples of NVBit Tools
+## Creating Your Own Tools
 
-As explained above, inside the ```tools``` folder there are few example of
-NVBit tools. Rather than describing all of them in this README file we refer
-to comment in the source code of each one them.
+After working through the examples, you'll be ready to create your own custom instrumentation tools. The repository includes templates and guidance for:
 
-The natural order (in terms of complexity) to learn these tools is:
+1. **Tool Structure** - Understanding the host/device code organization
+2. **Build Systems** - Setting up Makefiles for your tools
+3. **Common Patterns** - Reusing code for frequently needed functionality
+4. **Debugging Techniques** - Troubleshooting instrumentation issues
 
-1. instr_count: Perform thread level instruction count. Specifically, a
-function is injected before each SASS instruction. Inside this function the
-total number of active threads in a warp is computed and a global counter is
-incremented.
+## Contributing
 
-2. opcode_hist: Generate an histogram of all executed instructions.
+We welcome contributions to improve the tutorial! If you find issues or have suggestions:
 
-3. mov_replace: Replace each SASS instruction of type MOV with an equivalent
-function. This tool make use of the read/write register functionality within
-the instrumentation function.
+1. Open an issue describing the problem or enhancement
+2. Submit a pull request with your proposed changes
+3. Follow the coding style of the existing examples
 
-4. instr_countbb: Perform thread level instruction count by instrumenting
-basic blocks. The final result is the same as instr_count, but mush faster
-since less instructions are instrumented (only the first instruction in each
-basic block is instrumented and the counter).
+## Further Resources
 
-5. mem_trace: Trace memory reference addresses. This NVBit tool works
-similarly to the above example but instead of using a GPU side printf it uses
-a communication channel (provided in utils/channel.hpp) to transfer data from
-GPU-to-CPU and it performs the printf on the CPU side.
+For more details on the NVBit APIs, see the comments in `core/nvbit.h`.
 
-We also suggest to take a look to nvbit.h (and comments in it) to get
-familiar with the NVBit APIs.
+You may also find these resources helpful:
+- [NVIDIA Developer Blog](https://developer.nvidia.com/blog)
+- [CUDA Documentation](https://docs.nvidia.com/cuda/)
+- [CUDA GPU Binary Utilities](https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html)
+
+Happy learning!
