@@ -1,6 +1,21 @@
 # NVBit Tutorial: Memory Tracing
 
-This tutorial explores the `mem_trace` tool, which captures detailed information about memory accesses in CUDA kernels. It demonstrates how to use NVBit to track memory behavior and implement efficient GPU-to-CPU communication channels.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**TL;DR:** Captures every memory access (addresses, warp, CTA). Essential for finding coalescing issues and memory patterns. Very high overhead - use selectively!
+
+**Quick Start:**
+```bash
+# Warning: High overhead! Instrument only first kernel
+START_GRID_NUM=0 END_GRID_NUM=1 \
+  LD_PRELOAD=./tools/mem_trace/mem_trace.so ./app > trace.txt
+```
+
+**Typical Output:**
+```
+MEMTRACE: CTX 0x... - grid_launch_id 0 - CTA 0,0,0 - warp 0 - LDG.E -
+  0x7f8a01800000 0x7f8a01800008 0x7f8a01800010 ... (32 addresses)
+```
 
 ## Overview
 

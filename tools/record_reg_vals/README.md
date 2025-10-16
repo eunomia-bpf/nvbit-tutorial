@@ -1,6 +1,21 @@
 # NVBit Tutorial: Register Value Recording
 
-This tutorial explores the `record_reg_vals` tool, which captures the values of registers during GPU kernel execution. It demonstrates how to use NVBit to inspect and analyze the internal state of GPU programs in ways that aren't possible with standard debugging tools.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**TL;DR:** Captures register values during kernel execution. Perfect for debugging numerical errors (NaN/Inf), algorithm verification, and understanding data flow. Very high overhead.
+
+**Quick Start:**
+```bash
+# Instrument specific instruction range
+START_GRID_NUM=0 END_GRID_NUM=1 INSTR_BEGIN=10 INSTR_END=15 \
+  LD_PRELOAD=./tools/record_reg_vals/record_reg_vals.so ./app
+```
+
+**Use Cases:**
+- Finding where NaN/Infinity appears
+- Verifying algorithm correctness
+- Debugging divergence issues
+- Understanding register data flow
 
 ## Overview
 

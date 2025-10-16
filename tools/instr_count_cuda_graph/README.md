@@ -1,6 +1,33 @@
 # NVBit Tutorial: Instruction Counting with CUDA Graphs Support
 
-This tutorial explores the `instr_count_cuda_graph` tool, which extends the basic instruction counting functionality to support CUDA Graphs - an advanced CUDA feature for capturing and replaying sequences of GPU operations. This tool demonstrates how to adapt NVBit instrumentation to work with modern CUDA programming patterns.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**TL;DR:** Like `instr_count` but works with CUDA Graphs. Use this if your app uses cudaGraphLaunch, stream capture, or manual graph construction.
+
+**Quick Start:**
+```bash
+LD_PRELOAD=./tools/instr_count_cuda_graph/instr_count_cuda_graph.so ./graph_app
+# Works with both traditional and graph-based launches
+```
+
+**What are CUDA Graphs?**
+CUDA Graphs let you record sequences of kernel launches and replay them efficiently. Think of it like "recording a macro" of GPU operations for faster re-execution.
+
+```cpp
+// Traditional (works with regular instr_count)
+for (int i = 0; i < 100; i++) {
+    kernel<<<blocks, threads>>>();
+}
+
+// CUDA Graph (needs instr_count_cuda_graph)
+cudaGraph_t graph;
+cudaStreamBeginCapture(stream);
+kernel<<<blocks, threads, 0, stream>>>();
+cudaStreamEndCapture(stream, &graph);
+for (int i = 0; i < 100; i++) {
+    cudaGraphLaunch(graph, stream);  // Much faster!
+}
+```
 
 ## Overview
 

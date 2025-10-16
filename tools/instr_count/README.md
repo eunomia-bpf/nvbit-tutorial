@@ -1,6 +1,28 @@
 # NVBit Tutorial: Instruction Counting
 
-This tool measures how many assembly instructions each CUDA kernel executes. It's an excellent starting point for learning how to use NVBit to inject device code and collect performance metrics.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**TL;DR:** This tool counts how many GPU instructions your CUDA kernels execute. Perfect for learning NVBit basics.
+
+**Quick Start:**
+```bash
+LD_PRELOAD=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
+# Output: kernel 0 - vecAdd(...) - kernel instructions 50077
+```
+
+## Table of Contents
+
+- [Overview](#overview)
+- [What are Predicates?](#what-are-predicates)
+- [Architecture Diagram](#architecture-diagram)
+- [Code Structure](#code-structure)
+- [How It Works: Host Side](#how-it-works-host-side)
+- [How It Works: Device Side](#how-it-works-device-side)
+- [Building the Tool](#building-the-tool)
+- [Running the Tool](#running-the-tool)
+- [Sample Output](#sample-output)
+- [Common Issues](#common-issues)
+- [Next Steps](#next-steps)
 
 ## Overview
 
@@ -12,6 +34,95 @@ The instruction counting tool demonstrates the fundamental workflow of NVBit ins
 4. Process and report results after kernel completion
 
 This tutorial will walk through the implementation in detail to help you understand how to build similar tools.
+
+## What are Predicates?
+
+Before diving into the code, understand a key GPU concept: **predicates**.
+
+GPU instructions can be conditionally executed using predicates:
+```
+@P0 ADD R1, R2, R3    // Only executes if predicate P0 is true
+@!P1 MOV R4, R5       // Only executes if predicate P1 is false
+```
+
+Think of predicates like if-statements at the instruction level. When a predicate is false, the instruction is "predicated off" - it doesn't execute, but the thread still processes it.
+
+**Why this matters for counting:**
+- By default, we count all instructions, even predicated-off ones
+- Set `EXCLUDE_PRED_OFF=1` to count only instructions that actually execute
+- The tool checks each instruction's predicate to determine if it should count
+
+## Architecture Diagram
+
+Here's how the instruction counter works:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         HOST (CPU)                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  1. Application launches kernel                                      │
+│     │                                                                │
+│     v                                                                │
+│  2. NVBit intercepts launch (nvbit_at_cuda_event)                   │
+│     │                                                                │
+│     v                                                                │
+│  3. Instrument kernel function (instrument_function_if_needed)       │
+│     - Iterate through instructions                                   │
+│     - Insert call to count_instrs before each instruction            │
+│     - Pass predicate, counter pointer as arguments                   │
+│     │                                                                │
+│     v                                                                │
+│  4. Enable instrumentation, reset counter                            │
+│     │                                                                │
+│     v                                                                │
+│  5. Kernel executes on GPU  ─────────────────────┐                  │
+│                                                   │                  │
+└───────────────────────────────────────────────────┼──────────────────┘
+                                                    │
+┌───────────────────────────────────────────────────┼──────────────────┐
+│                        DEVICE (GPU)               │                  │
+├───────────────────────────────────────────────────┼──────────────────┤
+│                                                   v                  │
+│  For each instrumented instruction:                                  │
+│     Original:  ADD R1, R2, R3                                       │
+│                                                                      │
+│     Becomes:   count_instrs(predicate, ...)  ◄── Injected           │
+│                ADD R1, R2, R3                ◄── Original            │
+│                                                                      │
+│  count_instrs():                                                     │
+│     - Check if thread's predicate is true                           │
+│     - Use warp vote to collect all thread states                    │
+│     - First thread in warp atomically updates counter               │
+│     │                                                                │
+│     v                                                                │
+│  __managed__ counter updated (accessible from host)                  │
+│                                                                      │
+└───────────────────────────────────────────────────┬──────────────────┘
+                                                    │
+┌───────────────────────────────────────────────────┼──────────────────┐
+│                         HOST (CPU)                │                  │
+├───────────────────────────────────────────────────┼──────────────────┤
+│                                                   v                  │
+│  6. Kernel completes                                                 │
+│     │                                                                │
+│     v                                                                │
+│  7. cudaDeviceSynchronize() - wait for GPU                          │
+│     │                                                                │
+│     v                                                                │
+│  8. Read counter from managed memory                                 │
+│     │                                                                │
+│     v                                                                │
+│  9. Print results: "kernel instructions 50077"                      │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- Host code runs on CPU, instruments the kernel before it executes
+- Device code (`count_instrs`) runs on GPU, called before each instruction
+- Managed memory (`__managed__ counter`) is shared between CPU and GPU
+- Warp-level operations ensure efficient counting (one atomic op per warp)
 
 ## Code Structure
 
@@ -274,11 +385,30 @@ To create a similar tool for your own metrics:
 
 For example, you could count only memory operations, track instruction latency, or gather statistics on control flow.
 
-## Common Issues and Solutions
+## Common Issues
 
-- **High Overhead**: Instrumenting every instruction can slow execution significantly. Consider using basic block instrumentation (like in `instr_count_bb`) for better performance.
-- **Multiple Kernels**: The mutex prevents race conditions when multiple kernels run concurrently. Don't remove it!
-- **Device Code Changes**: If you modify `inject_funcs.cu`, you must rebuild the entire tool.
+### High Overhead (20-100x slowdown)
+
+**Expected behavior.** Instrumenting every instruction is expensive. Solutions:
+- Use `instr_count_bb` for 5-10x better performance
+- Instrument selectively: `INSTR_END=100` to instrument first 100 instructions only
+- Limit kernels: `KERNEL_BEGIN=0 KERNEL_END=1` for first kernel only
+
+### Counter Shows Zero
+
+Check:
+1. Is `nvdisasm` in PATH? Run `which nvdisasm`
+2. Is instrumentation enabled? Try `ACTIVE_FROM_START=1`
+3. Run with `TOOL_VERBOSE=1` to see what's happening
+
+### Unexpectedly Low Count
+
+Likely counting at warp-level (default). For thread-level count:
+```bash
+COUNT_WARP_LEVEL=0 LD_PRELOAD=./tools/instr_count/instr_count.so ./app
+```
+
+Thread count should be ~32x higher (32 threads per warp).
 
 ## Next Steps
 

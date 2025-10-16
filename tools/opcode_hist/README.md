@@ -1,6 +1,14 @@
 # NVBit Tutorial: Opcode Histogram
 
-This tutorial explores the `opcode_hist` tool, which builds a histogram of executed instructions categorized by their opcodes. It's a powerful way to understand the instruction mix in your CUDA kernels and identify optimization opportunities.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**TL;DR:** Shows what types of instructions your kernels execute (loads, stores, math, etc.). Essential for understanding kernel behavior.
+
+**Quick Start:**
+```bash
+LD_PRELOAD=./tools/opcode_hist/opcode_hist.so ./test-apps/vectoradd/vectoradd
+# Shows: LDG.E = 19600, DMUL = 9800, STG.E = 9800, etc.
+```
 
 ## Overview
 
@@ -207,16 +215,124 @@ This output tells us:
 - The most frequent operations were loads (`LDG.E`), stores (`STG.E`), and double-precision multiply (`DMUL`)
 - There were relatively few branch instructions (`BRA`)
 
+## Common SASS Opcodes Reference
+
+### Memory Operations
+| Opcode | Description | Optimization Hint |
+|--------|-------------|-------------------|
+| **LDG** | Load from global memory | Check coalescing with mem_trace |
+| **STG** | Store to global memory | Minimize stores, batch writes |
+| **LDS** | Load from shared memory | Watch for bank conflicts |
+| **STS** | Store to shared memory | Use padding to avoid conflicts |
+| **LDL** | Load from local memory | High count = register spilling! |
+| **STL** | Store to local memory | Reduce register usage |
+
+### Arithmetic Operations
+| Opcode | Description | Optimization Hint |
+|--------|-------------|-------------------|
+| **FADD/DADD** | Float/Double addition | Normal |
+| **FMUL/DMUL** | Float/Double multiplication | Normal |
+| **FFMA/DFMA** | Fused multiply-add | Efficient, good to see |
+| **IMAD** | Integer multiply-add | Common for indexing |
+| **IADD3** | 3-input integer add | Addressing calculations |
+
+### Control Flow
+| Opcode | Description | Optimization Hint |
+|--------|-------------|-------------------|
+| **BRA** | Branch | High count = divergence risk |
+| **SSY/SYNC** | Synchronization | Divergent control flow |
+| **BAR** | Barrier synchronization | Expected in block sync |
+| **EXIT** | Kernel exit | Should equal # of blocks |
+
+### Data Movement
+| Opcode | Description | Optimization Hint |
+|--------|-------------|-------------------|
+| **MOV** | Register move | Too many = inefficiency |
+| **SHL/SHR** | Bit shifts | Normal for indexing |
+| **SEL** | Select/conditional move | Used instead of branches |
+
+## Interpreting Results for Optimization
+
+### Example 1: Memory-Bound Kernel
+
+```
+LDG.E = 100,000
+STG.E = 50,000
+FADD = 10,000
+FMUL = 10,000
+```
+
+**Analysis:** 75% memory ops, 25% compute. **Memory-bound.**
+
+**Optimization strategies:**
+1. Check memory coalescing with `mem_trace`
+2. Use shared memory to cache frequently accessed data
+3. Increase arithmetic intensity (more compute per load)
+
+### Example 2: Compute-Bound Kernel
+
+```
+FFMA = 150,000
+FADD = 50,000
+FMUL = 50,000
+LDG.E = 5,000
+```
+
+**Analysis:** 90% compute, 10% memory. **Compute-bound.**
+
+**Optimization strategies:**
+1. Maximize occupancy to hide latency
+2. Use faster math operations if precision allows
+3. Look for vectorization opportunities (e.g., float4)
+
+### Example 3: Divergence Problem
+
+```
+BRA = 80,000
+SSY = 40,000
+SYNC = 40,000
+(plus regular ops)
+```
+
+**Analysis:** Too many branches and sync points.
+
+**Optimization strategies:**
+1. Reduce branching in hot loops
+2. Reorganize data to minimize divergence
+3. Use predication (SEL) instead of branches
+
+### Example 4: Register Pressure
+
+```
+LDL = 20,000  // Local memory loads
+STL = 20,000  // Local memory stores
+```
+
+**Analysis:** Register spilling to local memory.
+
+**Optimization strategies:**
+1. Reduce register usage per thread
+2. Decrease occupancy (use more registers, fewer blocks)
+3. Refactor to use fewer temporary variables
+
 ## Analyzing the Histogram
 
-The histogram provides valuable insights:
+Quick interpretation guide:
 
-1. **Memory Operations**: High counts for `LDG`, `LDS`, `STG`, etc. indicate memory-bound code
-2. **Compute Operations**: Many `FMUL`, `FADD`, `IMAD`, etc. suggest compute-bound sections
-3. **Control Flow**: `BRA`, `SYNC`, `BAR` instructions indicate branching and synchronization overhead
-4. **Data Movement**: `MOV` operations show register-to-register transfers
+1. **Memory Operations** (LDG, STG, LDS, STS):
+   - High percentage → memory-bound, optimize access patterns
 
-Comparing the histogram across different implementations of the same algorithm can highlight efficiency differences.
+2. **Compute Operations** (FADD, FMUL, FFMA, IMAD):
+   - High percentage → compute-bound, maximize occupancy
+
+3. **Control Flow** (BRA, SYNC):
+   - High counts → potential divergence issues
+
+4. **Local Memory** (LDL, STL):
+   - Any count > 0 → register spilling, reduce register usage
+
+5. **Data Movement** (MOV):
+   - Very high counts → compiler not optimizing well
 
 ## Extending the Tool
 

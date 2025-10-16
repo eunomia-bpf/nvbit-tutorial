@@ -1,6 +1,37 @@
 # NVBit Tutorial: GPU-to-CPU Printing with mem_printf2
 
-This tutorial explores the `mem_printf2` tool, which demonstrates how to implement a simple but powerful debugging mechanism: sending custom text messages from GPU code back to the CPU. This capability is invaluable for debugging complex CUDA kernels where standard debugging tools may fall short.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**⚠️ Known Issue:** This tool has device function invocation issues in the current implementation. It's included as an educational example of GPU-to-CPU communication concepts.
+
+**TL;DR:** Demonstrates sending printf-style messages from GPU to CPU. Educational tool showing inter-device communication patterns.
+
+**Status:** Partially functional - channel communication works, but device function calls may fail. See main README FAQ for details.
+
+## Comparison: NVBit Printf vs CUDA Printf
+
+| Feature | NVBit mem_printf2 | CUDA printf |
+|---------|-------------------|-------------|
+| **Requires source code** | No (binary instrumentation) | Yes |
+| **Can add to any binary** | Yes | No |
+| **Selective instrumentation** | Yes (by kernel, instruction) | No |
+| **Performance overhead** | High (50-200x) | Medium (5-20x) |
+| **Setup complexity** | Complex (channel, threads) | Simple (builtin) |
+| **Best for** | Learning, binary analysis | Normal development |
+
+**When to use CUDA printf instead:**
+```cuda
+// If you have source code, just use this:
+__global__ void kernel() {
+    printf("Thread %d value %f\n", threadIdx.x, value);
+}
+```
+
+**When NVBit printf is useful:**
+- Analyzing third-party binaries without source
+- Adding instrumentation to specific instructions
+- Learning GPU-to-CPU communication patterns
+- Research on binary instrumentation
 
 ## Overview
 

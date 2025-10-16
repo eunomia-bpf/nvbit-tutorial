@@ -1,6 +1,16 @@
 # NVBit Tutorial: MOV Instruction Replacement
 
-This tutorial explores the `mov_replace` tool, which demonstrates how to replace existing GPU instructions with custom implementations. It's a powerful example of how NVBit can be used to modify the behavior of compiled CUDA code at runtime.
+> Github repo: <https://github.com/eunomia-bpf/nvbit-tutorial>
+
+**⚠️ WARNING: Research/Educational Tool Only**
+This tool has 100-1000x overhead. Use only for:
+- Learning instruction replacement concepts
+- Research (fault injection, custom operations)
+- Small-scale testing
+
+**NOT for production or performance profiling!**
+
+**TL;DR:** Replaces MOV instructions with custom function calls. Demonstrates how to modify GPU code at runtime.
 
 ## Overview
 
@@ -259,14 +269,54 @@ To work effectively with instruction replacement, it helps to understand NVIDIA'
 
 The `mov_replace` tool handles the most common variants, but could be extended to handle more specialized forms.
 
+## Other Replaceable Instructions
+
+The same technique can replace other SASS instructions:
+
+### Easy to Replace (Similar to MOV)
+- **ADD/SUB/MUL**: Arithmetic operations
+- **AND/OR/XOR**: Bitwise operations
+- **SHL/SHR**: Bit shifts
+- **SEL**: Conditional select
+
+### Moderate Difficulty
+- **FADD/FMUL**: Floating-point math (watch for precision)
+- **IMAD**: Integer multiply-add (3 operands)
+- **LEA**: Load effective address
+
+### Hard to Replace
+- **LDG/STG**: Memory operations (need complex address handling)
+- **BRA**: Branches (control flow complications)
+- **FFMA**: Fused ops (may need multiple replacements)
+
+### Example: Replacing ADD
+
+```cpp
+// In instrument_function_if_needed():
+if (opcode.compare(0, 3, "ADD") == 0) {
+    // Similar to MOV but with 3 operands
+    nvbit_insert_call(instr, "add_replace", IPOINT_BEFORE);
+    // Add destination, source1, source2
+    nvbit_remove_orig(instr);
+}
+
+// In inject_funcs.cu:
+__device__ void add_replace(int pred, int dst, int src1, int src2, ...) {
+    if (!pred) return;
+    int val1 = nvbit_read_reg(src1);
+    int val2 = nvbit_read_reg(src2);
+    nvbit_write_reg(dst, val1 + val2);
+}
+```
+
 ## Extending the Tool
 
-This simple example can be extended in various ways:
+Practical extensions:
 
-1. **Instruction tracing**: Add logging to see when MOV instructions execute and what values are transferred
-2. **Value manipulation**: Modify values during transfer for debugging or analysis
-3. **Conditional execution**: Add custom handling for predicated execution
-4. **Other instructions**: Apply the same approach to other instruction types (ADD, MUL, etc.)
+1. **Instruction tracing**: Log when/where instructions execute
+2. **Fault injection**: Deliberately corrupt values to test resilience
+3. **Value tracking**: Monitor specific register values
+4. **Custom operations**: Implement ops not in hardware
 
 ## Advanced Applications
 
