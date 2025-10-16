@@ -31,41 +31,18 @@ for (int i = 0; i < 100; i++) {
 
 ## Overview
 
-CUDA Graphs provide a way to define and optimize sequences of CUDA operations, improving performance by reducing launch overhead and enabling better scheduling. However, they present unique challenges for instrumentation tools:
+CUDA Graphs provide a way to define and optimize sequences of CUDA operations, improving performance by reducing launch overhead and enabling better scheduling. However, they present unique challenges for instrumentation tools: kernels can be launched directly or captured into a graph for later execution, the same graph can be executed multiple times with different inputs, and multiple kernels in a graph can execute concurrently.
 
-1. Kernels can be launched directly or captured into a graph for later execution
-2. The same graph can be executed multiple times with different inputs
-3. Multiple kernels in a graph can execute concurrently
-
-The `instr_count_cuda_graph` tool addresses these challenges by:
-1. Supporting both direct kernel launches and graph-based launches
-2. Tracking per-kernel instruction counts even for concurrent execution
-3. Synchronizing results after graph execution
-4. Handling both manual graph construction and stream capture
+The `instr_count_cuda_graph` tool addresses these challenges by supporting both direct kernel launches and graph-based launches, tracking per-kernel instruction counts even for concurrent execution, synchronizing results after graph execution, and handling both manual graph construction and stream capture.
 
 ## Code Structure
 
-The tool consists of two main components:
-
-- `instr_count_cuda_graph.cu` – Host-side code that:
-  - Maps CUDA functions to instruction counters
-  - Handles different types of kernel launches
-  - Processes CUDA Graph API calls
-  - Reports per-kernel instruction counts
-  
-- `inject_funcs.cu` – Device-side code that:
-  - Executes on the GPU for each instruction
-  - Updates per-kernel counters atomically
+- `instr_count_cuda_graph.cu` – Host-side code that maps CUDA functions to instruction counters, handles different types of kernel launches, processes CUDA Graph API calls, and reports per-kernel instruction counts
+- `inject_funcs.cu` – Device-side code that executes on the GPU for each instruction and updates per-kernel counters atomically
 
 ## CUDA Graphs Overview
 
-Before diving into the implementation, let's understand the three main ways kernels can be launched with CUDA Graphs:
-
-1. **Standard kernel launch**: The traditional `cudaLaunchKernel` or `cuLaunchKernel` approach
-2. **Stream capture**: Capturing a sequence of operations executed on a stream into a graph
-3. **Manual graph construction**: Building a graph by explicitly adding kernel nodes
-
-A complete instrumentation tool must handle all three scenarios.
+Before diving into the implementation, understand the three main ways kernels can be launched with CUDA Graphs: standard kernel launch (the traditional `cudaLaunchKernel` or `cuLaunchKernel` approach), stream capture (capturing a sequence of operations executed on a stream into a graph), and manual graph construction (building a graph by explicitly adding kernel nodes). A complete instrumentation tool must handle all three scenarios.
 
 ## How It Works: Host Side (instr_count_cuda_graph.cu)
 
@@ -132,11 +109,7 @@ void try_to_instrument(CUfunction f, CUcontext ctx) {
 }
 ```
 
-This function is called for any kernel that's about to be launched or added to a graph:
-1. It checks if the kernel has already been seen and skips if it has
-2. It assigns a unique ID to the kernel and maps it to a counter
-3. It instruments the kernel code to count instructions
-4. It enables or disables instrumentation based on configuration
+This function is called for any kernel that's about to be launched or added to a graph. It checks if the kernel has already been seen and skips if it has, assigns a unique ID to the kernel and maps it to a counter, instruments the kernel code to count instructions, and enables or disables instrumentation based on configuration.
 
 ### 3. CUDA Event Handling
 
@@ -213,12 +186,7 @@ void nvbit_at_cuda_event(CUcontext ctx, int is_exit, nvbit_api_cuda_t cbid,
 }
 ```
 
-This function handles all CUDA API calls related to kernel launches and graphs:
-
-1. **Direct kernel launches**: For traditional launches, it instruments the kernel, waits for completion, and prints statistics.
-2. **Stream capture**: It detects if a kernel is being captured into a graph and skips synchronization.
-3. **Graph node creation**: It instruments kernels as they're added to graphs.
-4. **Graph launch**: After a graph executes, it synchronizes and prints statistics for all kernels.
+This function handles all CUDA API calls related to kernel launches and graphs. For direct kernel launches (traditional launches), it instruments the kernel, waits for completion, and prints statistics. For stream capture, it detects if a kernel is being captured into a graph and skips synchronization. For graph node creation, it instruments kernels as they're added to graphs. For graph launch, after a graph executes, it synchronizes and prints statistics for all kernels.
 
 ### 4. Result Reporting
 
@@ -239,11 +207,7 @@ void print_kernel_stats(CUfunction f, CUcontext ctx, int num_ctas) {
 }
 ```
 
-After a kernel or graph completes:
-1. We retrieve the instruction count for the specific kernel
-2. We add it to the running total
-3. We print detailed statistics
-4. We reset the kernel's counter for future executions
+After a kernel or graph completes, we retrieve the instruction count for the specific kernel, add it to the running total, print detailed statistics, and reset the kernel's counter for future executions.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -275,10 +239,7 @@ extern "C" __device__ __noinline__ void count_instrs(int predicate,
 }
 ```
 
-Key aspects of this device function:
-1. It takes a pointer to a specific kernel's counter
-2. It counts instructions either at warp or thread level
-3. It uses atomic operations to safely update the counter
+Key aspects of this device function: it takes a pointer to a specific kernel's counter, counts instructions either at warp or thread level, and uses atomic operations to safely update the counter.
 
 ## Understanding CUDA Graphs Scenarios
 
@@ -361,12 +322,7 @@ kernel 2 - reduceSum - #thread-blocks 32, kernel instructions 15360, total instr
 
 ## Benefits for CUDA Graphs Applications
 
-This tool provides several advantages for applications using CUDA Graphs:
-
-1. **Accurate profiling**: Get precise instruction counts even for graph-launched kernels
-2. **Per-kernel breakdown**: See which kernels in a graph consume the most instructions
-3. **Repeated execution analysis**: Measure instructions across multiple graph executions
-4. **Optimization guidance**: Identify which kernels to focus on for performance improvement
+This tool provides several advantages for applications using CUDA Graphs: accurate profiling (get precise instruction counts even for graph-launched kernels), per-kernel breakdown (see which kernels in a graph consume the most instructions), repeated execution analysis (measure instructions across multiple graph executions), and optimization guidance (identify which kernels to focus on for performance improvement).
 
 ## Common CUDA Graphs Patterns
 
@@ -415,29 +371,12 @@ The tool instruments each kernel as it's added to the graph.
 
 ## Extension Ideas
 
-This tool can be extended in several ways:
-
-1. **Graph structure analysis**: Identify relationships between nodes in a graph
-2. **Memory profiling**: Track memory accesses for graph-launched kernels
-3. **Optimization suggestions**: Recommend how to restructure graphs for better performance
-4. **Comparative analysis**: Compare instruction counts between graph and non-graph executions
+This tool can be extended in several ways: graph structure analysis (identify relationships between nodes in a graph), memory profiling (track memory accesses for graph-launched kernels), optimization suggestions (recommend how to restructure graphs for better performance), and comparative analysis (compare instruction counts between graph and non-graph executions).
 
 ## CUDA Graphs Best Practices
 
-Based on the insights from this tool, here are some best practices for CUDA Graphs:
-
-1. **Balance graph size**: Very large graphs may cause instrumentation overhead
-2. **Counter limits**: Be aware of the `MAX_NUM_KERNEL` limit for unique kernels
-3. **Synchronization**: The tool needs to synchronize after graph execution, which may affect timing measurements
-4. **Stream awareness**: Different streams may have different capturing states
+Based on the insights from this tool, balance graph size (very large graphs may cause instrumentation overhead), be aware of counter limits (the `MAX_NUM_KERNEL` limit for unique kernels), understand synchronization (the tool needs to synchronize after graph execution, which may affect timing measurements), and maintain stream awareness (different streams may have different capturing states).
 
 ## Next Steps
 
-After mastering instruction counting with CUDA Graphs, consider:
-
-1. Building more sophisticated analysis tools for graph-based applications
-2. Implementing graph structure visualization
-3. Creating a tool that compares performance between traditional launches and graph launches
-4. Exploring how different graph structures affect instruction counts
-
-CUDA Graphs support represents an important evolution in NVBit tools, enabling them to work with modern, high-performance CUDA programming patterns.
+After mastering instruction counting with CUDA Graphs, consider building more sophisticated analysis tools for graph-based applications, implementing graph structure visualization, creating a tool that compares performance between traditional launches and graph launches, or exploring how different graph structures affect instruction counts. CUDA Graphs support represents an important evolution in NVBit tools, enabling them to work with modern, high-performance CUDA programming patterns.

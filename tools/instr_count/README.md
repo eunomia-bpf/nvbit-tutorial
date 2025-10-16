@@ -26,14 +26,7 @@ LD_PRELOAD=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 
 ## Overview
 
-The instruction counting tool demonstrates the fundamental workflow of NVBit instrumentation:
-
-1. Intercept CUDA kernel launches
-2. Analyze and instrument kernel code before execution
-3. Collect data during kernel execution
-4. Process and report results after kernel completion
-
-This tutorial will walk through the implementation in detail to help you understand how to build similar tools.
+The instruction counting tool demonstrates the fundamental workflow of NVBit instrumentation: intercept CUDA kernel launches, analyze and instrument kernel code before execution, collect data during kernel execution, and process and report results after kernel completion. This tutorial walks through the implementation in detail to help you understand how to build similar tools.
 
 ## What are Predicates?
 
@@ -118,24 +111,14 @@ Here's how the instruction counter works:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Points:**
-- Host code runs on CPU, instruments the kernel before it executes
-- Device code (`count_instrs`) runs on GPU, called before each instruction
-- Managed memory (`__managed__ counter`) is shared between CPU and GPU
-- Warp-level operations ensure efficient counting (one atomic op per warp)
+**Key Points:** Host code runs on CPU and instruments the kernel before it executes. Device code (`count_instrs`) runs on GPU, called before each instruction. Managed memory (`__managed__ counter`) is shared between CPU and GPU. Warp-level operations ensure efficient counting (one atomic op per warp).
 
 ## Code Structure
 
 The tool consists of two main source files:
 
-- `instr_count.cu` – Host-side code that handles:
-  - Intercepting CUDA kernel launches
-  - Instrumenting the kernel code
-  - Printing results after execution
-  
-- `inject_funcs.cu` – Device-side code that contains:
-  - The `count_instrs` function that executes on the GPU
-  - Logic to update the instruction counter
+- `instr_count.cu` – Host-side code that handles intercepting CUDA kernel launches, instrumenting the kernel code, and printing results after execution
+- `inject_funcs.cu` – Device-side code that contains the `count_instrs` function (executes on the GPU) and logic to update the instruction counter
 
 ## How It Works: Host Side (instr_count.cu)
 
@@ -209,12 +192,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-This is where the magic happens. For each instruction in the specified range:
-1. A call to our `count_instrs` device function is inserted before the instruction
-2. Arguments are added to the call: 
-   - The instruction's predicate value (to handle predicated instructions)
-   - Whether to count at warp or thread level
-   - A pointer to our counter variable
+This is where the magic happens. For each instruction in the specified range, a call to our `count_instrs` device function is inserted before the instruction. Arguments are added to the call: the instruction's predicate value (to handle predicated instructions), whether to count at warp or thread level, and a pointer to our counter variable.
 
 ### 4. CUDA Event Callback
 
@@ -255,12 +233,7 @@ void nvbit_at_cuda_event(CUcontext ctx, int is_exit, nvbit_api_cuda_t cbid,
 }
 ```
 
-This callback is triggered for every CUDA API call. We use it to:
-1. Intercept kernel launches
-2. Instrument the kernel before it runs
-3. Enable or disable our instrumentation
-4. Reset the counter before execution
-5. Print results after the kernel completes
+This callback is triggered for every CUDA API call. We use it to intercept kernel launches, instrument the kernel before it runs, enable or disable our instrumentation, reset the counter before execution, and print results after the kernel completes.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -300,12 +273,7 @@ extern "C" __device__ __noinline__ void count_instrs(int predicate,
 }
 ```
 
-Key aspects:
-1. We use warp-level voting functions (`__ballot_sync`, `__activemask()`) to determine which threads are active and have true predicates
-2. Only one thread per warp performs the atomic update to avoid contention
-3. Two counting modes are supported:
-   - Warp-level counting (adds 1 per executed warp instruction)
-   - Thread-level counting (adds the number of active threads)
+We use warp-level voting functions (`__ballot_sync`, `__activemask()`) to determine which threads are active and have true predicates. Only one thread per warp performs the atomic update to avoid contention. Two counting modes are supported: warp-level counting (adds 1 per executed warp instruction) and thread-level counting (adds the number of active threads).
 
 ## Building the Tool
 
@@ -377,29 +345,17 @@ The output shows:
 
 ## Creating Your Own Counting Tool
 
-To create a similar tool for your own metrics:
-
-1. Modify `inject_funcs.cu` to count a different metric
-2. Update the instrumentation in `instr_count.cu` to target specific instructions
-3. Change how results are reported in the CUDA event callback
-
-For example, you could count only memory operations, track instruction latency, or gather statistics on control flow.
+To create a similar tool for your own metrics, modify `inject_funcs.cu` to count a different metric, update the instrumentation in `instr_count.cu` to target specific instructions, and change how results are reported in the CUDA event callback. For example, you could count only memory operations, track instruction latency, or gather statistics on control flow.
 
 ## Common Issues
 
 ### High Overhead (20-100x slowdown)
 
-**Expected behavior.** Instrumenting every instruction is expensive. Solutions:
-- Use `instr_count_bb` for 5-10x better performance
-- Instrument selectively: `INSTR_END=100` to instrument first 100 instructions only
-- Limit kernels: `KERNEL_BEGIN=0 KERNEL_END=1` for first kernel only
+**Expected behavior.** Instrumenting every instruction is expensive. Solutions: use `instr_count_bb` for 5-10x better performance, instrument selectively (`INSTR_END=100` for first 100 instructions only), or limit kernels (`KERNEL_BEGIN=0 KERNEL_END=1` for first kernel only).
 
 ### Counter Shows Zero
 
-Check:
-1. Is `nvdisasm` in PATH? Run `which nvdisasm`
-2. Is instrumentation enabled? Try `ACTIVE_FROM_START=1`
-3. Run with `TOOL_VERBOSE=1` to see what's happening
+Check if `nvdisasm` is in PATH (`which nvdisasm`), if instrumentation is enabled (try `ACTIVE_FROM_START=1`), and run with `TOOL_VERBOSE=1` to see what's happening.
 
 ### Unexpectedly Low Count
 
@@ -412,9 +368,4 @@ Thread count should be ~32x higher (32 threads per warp).
 
 ## Next Steps
 
-After mastering instruction counting, explore the more advanced tools:
-- `opcode_hist`: Generate histograms of executed instructions
-- `instr_count_bb`: More efficient basic-block level instrumentation
-- `mem_trace`: Track memory access patterns
-
-With NVBit, you can develop sophisticated GPU analysis tools without modifying application source code.
+After mastering instruction counting, explore the more advanced tools: `opcode_hist` (generate histograms of executed instructions), `instr_count_bb` (more efficient basic-block level instrumentation), and `mem_trace` (track memory access patterns). With NVBit, you can develop sophisticated GPU analysis tools without modifying application source code.

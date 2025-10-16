@@ -19,32 +19,13 @@ MEMTRACE: CTX 0x... - grid_launch_id 0 - CTA 0,0,0 - warp 0 - LDG.E -
 
 ## Overview
 
-Understanding memory access patterns is crucial for optimizing GPU code. The `mem_trace` tool:
-
-1. Instruments all memory instructions in a CUDA kernel
-2. Captures the addresses accessed by each warp
-3. Collects contextual information (grid, block, warp IDs)
-4. Sends this data efficiently from the GPU to the CPU
-5. Prints or analyzes the memory trace
-
-This enables developers to identify access patterns, detect coalescing issues, find memory divergence, and optimize data layouts.
+Understanding memory access patterns is crucial for optimizing GPU code. The `mem_trace` tool instruments all memory instructions in a CUDA kernel, captures the addresses accessed by each warp, collects contextual information (grid, block, warp IDs), sends this data efficiently from the GPU to the CPU, and prints or analyzes the memory trace. This enables developers to identify access patterns, detect coalescing issues, find memory divergence, and optimize data layouts.
 
 ## Code Structure
 
-The tool consists of three main components:
-
-- `mem_trace.cu` – Host-side code that:
-  - Establishes a communication channel between GPU and CPU
-  - Identifies and instruments memory instructions
-  - Processes and prints memory trace data
-  
-- `inject_funcs.cu` – Device-side code that:
-  - Captures memory addresses from all threads in a warp
-  - Packages the data with execution context
-  - Sends the data through the channel to the host
-  
-- `common.h` – Shared structure definition for:
-  - The `mem_access_t` struct used to transfer memory access data
+- `mem_trace.cu` – Host-side code that establishes a communication channel between GPU and CPU, identifies and instruments memory instructions, and processes and prints memory trace data
+- `inject_funcs.cu` – Device-side code that captures memory addresses from all threads in a warp, packages the data with execution context, and sends the data through the channel to the host
+- `common.h` – Shared structure definition for the `mem_access_t` struct used to transfer memory access data
 
 ## How It Works: Communication Channel
 
@@ -83,10 +64,7 @@ void init_context_state(CUcontext ctx) {
 }
 ```
 
-When a CUDA context is created, we:
-1. Create a device channel in CUDA managed memory
-2. Initialize a host channel with a callback function
-3. Start a receiver thread that will process messages
+When a CUDA context is created, we create a device channel in CUDA managed memory, initialize a host channel with a callback function, and start a receiver thread that will process messages.
 
 ### 2. Instrumentation Logic
 
@@ -136,15 +114,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-The key aspects of the instrumentation:
-
-1. We filter for memory instructions (skipping non-memory and constant memory ops)
-2. We map each opcode to a numeric ID for compact representation
-3. For each memory reference operand in an instruction, we:
-   - Insert a call to `instrument_mem`
-   - Pass the predicate, opcode ID, memory address, grid ID, and channel pointer
-4. The memory address is extracted with `nvbit_add_call_arg_mref_addr64`
-5. The grid launch ID is filled in at launch time with `nvbit_add_call_arg_launch_val64`
+The key aspects of the instrumentation: we filter for memory instructions (skipping non-memory and constant memory ops), map each opcode to a numeric ID for compact representation, and for each memory reference operand in an instruction, insert a call to `instrument_mem` and pass the predicate, opcode ID, memory address, grid ID, and channel pointer. The memory address is extracted with `nvbit_add_call_arg_mref_addr64`, and the grid launch ID is filled in at launch time with `nvbit_add_call_arg_launch_val64`.
 
 ### 3. Receiver Thread
 
@@ -190,11 +160,7 @@ void* recv_thread_fun(void* args) {
 }
 ```
 
-The receiver thread:
-1. Continuously polls the channel for new data
-2. Processes received bytes in chunks of `mem_access_t` structures
-3. Formats and prints information about each memory access
-4. Continues until signaled to stop
+The receiver thread continuously polls the channel for new data, processes received bytes in chunks of `mem_access_t` structures, formats and prints information about each memory access, and continues until signaled to stop.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -240,15 +206,7 @@ extern "C" __device__ __noinline__ void instrument_mem(int pred, int opcode_id,
 }
 ```
 
-Key aspects of the device function:
-
-1. We check if the thread is predicated (should execute)
-2. We use warp-level functions to:
-   - Identify active threads with `__ballot_sync`
-   - Collect addresses from all threads with `__shfl_sync`
-3. We capture execution context (grid, CTA, warp IDs)
-4. Only one thread per warp pushes data to avoid duplicates
-5. We use the channel to send the data to the host
+Key aspects of the device function: we check if the thread is predicated (should execute) and use warp-level functions to identify active threads with `__ballot_sync` and collect addresses from all threads with `__shfl_sync`. We capture execution context (grid, CTA, warp IDs), only one thread per warp pushes data to avoid duplicates, and we use the channel to send the data to the host.
 
 ## The Memory Access Structure (common.h)
 
@@ -266,12 +224,7 @@ typedef struct {
 } mem_access_t;
 ```
 
-This compact structure captures:
-1. Which kernel invocation (grid_launch_id)
-2. Which thread block (CTA coordinates)
-3. Which warp within the block
-4. What type of memory instruction (opcode_id)
-5. The memory addresses accessed by all 32 threads in the warp
+This compact structure captures which kernel invocation (grid_launch_id), which thread block (CTA coordinates), which warp within the block, what type of memory instruction (opcode_id), and the memory addresses accessed by all 32 threads in the warp.
 
 ## Building the Tool
 
@@ -342,53 +295,20 @@ Analyze whether accesses follow sequential, strided, or random patterns, which h
 
 ## Performance Considerations
 
-Memory tracing has significant overhead due to:
-1. The additional function calls for every memory instruction
-2. The collection and communication of addresses
-3. The processing and printing of trace data
-
-For large applications, consider:
-- Limiting instrumentation to specific kernels or instructions
-- Sampling memory accesses instead of capturing all of them
-- Post-processing the trace to focus on patterns rather than individual accesses
+Memory tracing has significant overhead due to the additional function calls for every memory instruction, the collection and communication of addresses, and the processing and printing of trace data. For large applications, consider limiting instrumentation to specific kernels or instructions, sampling memory accesses instead of capturing all of them, or post-processing the trace to focus on patterns rather than individual accesses.
 
 ## Channel Implementation
 
-The `mem_trace` tool uses a custom channel implementation to efficiently transfer data from GPU to CPU:
-
-1. **Producer-Consumer Model**: The GPU threads produce data, and a CPU thread consumes it
-2. **Ring Buffer**: The channel uses a circular buffer with atomic operations for synchronization
-3. **Batched Communication**: Data is transferred in batches to amortize overhead
-4. **Asynchronous Processing**: The receiving thread runs concurrently with kernel execution
-
-This approach is much more efficient than using GPU printf or cudaMemcpy for each memory access.
+The `mem_trace` tool uses a custom channel implementation to efficiently transfer data from GPU to CPU. It uses a producer-consumer model (GPU threads produce data, and a CPU thread consumes it), a ring buffer (circular buffer with atomic operations for synchronization), batched communication (data is transferred in batches to amortize overhead), and asynchronous processing (the receiving thread runs concurrently with kernel execution). This approach is much more efficient than using GPU printf or cudaMemcpy for each memory access.
 
 ## CUDA Graphs Support
 
-The tool includes special handling for CUDA graphs, which are a way to record and replay sequences of CUDA operations:
-
-1. **Stream Capture**: Detects if a kernel is being captured rather than executed
-2. **Graph Node Tracking**: Instruments kernels added to graphs manually
-3. **Graph Launch**: Synchronizes and flushes the channel after graph execution
-
-This ensures the tool works correctly with modern CUDA applications that use the graphs API.
+The tool includes special handling for CUDA graphs, which are a way to record and replay sequences of CUDA operations: stream capture (detects if a kernel is being captured rather than executed), graph node tracking (instruments kernels added to graphs manually), and graph launch (synchronizes and flushes the channel after graph execution). This ensures the tool works correctly with modern CUDA applications that use the graphs API.
 
 ## Extending the Tool
 
-You can extend this tool in several ways:
-
-1. **Custom Analysis**: Modify the receiver to analyze patterns instead of just printing
-2. **Selective Instrumentation**: Add filters to focus on specific memory operations
-3. **Visualization**: Output the trace in a format suitable for visual analysis tools
-4. **Memory Hierarchy Analysis**: Add tracking of cache behavior or memory hierarchy effects
+You can extend this tool in several ways: custom analysis (modify the receiver to analyze patterns instead of just printing), selective instrumentation (add filters to focus on specific memory operations), visualization (output the trace in a format suitable for visual analysis tools), and memory hierarchy analysis (add tracking of cache behavior or memory hierarchy effects).
 
 ## Next Steps
 
-After capturing memory traces, consider:
-
-1. Using tools like `nvvp` or `nsight-compute` to correlate with hardware performance counters
-2. Implementing data layout transformations based on identified access patterns
-3. Creating a custom visualization tool to better understand complex access patterns
-4. Combining with instruction mix analysis from `opcode_hist` for a complete performance picture
-
-Memory access patterns are often the key to GPU performance optimization, and this tool provides the visibility needed to understand and improve them.
+After capturing memory traces, consider using tools like `nvvp` or `nsight-compute` to correlate with hardware performance counters, implementing data layout transformations based on identified access patterns, creating a custom visualization tool to better understand complex access patterns, or combining with instruction mix analysis from `opcode_hist` for a complete performance picture. Memory access patterns are often the key to GPU performance optimization, and this tool provides the visibility needed to understand and improve them.

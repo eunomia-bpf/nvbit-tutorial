@@ -21,16 +21,8 @@ For example, you might discover:
 
 ## Code Structure
 
-Like other NVBit tools, `opcode_hist` consists of two main components:
-
-- `opcode_hist.cu` – Host code that:
-  - Maps instruction opcodes to unique IDs
-  - Inserts instrumentation for each instruction
-  - Aggregates and prints the histogram after kernel execution
-  
-- `inject_funcs.cu` – Device code that:
-  - Executes on the GPU for each instruction
-  - Updates histogram counters in managed memory
+- `opcode_hist.cu` – Host code that maps instruction opcodes to unique IDs, inserts instrumentation for each instruction, and aggregates and prints the histogram after kernel execution
+- `inject_funcs.cu` – Device code that executes on the GPU for each instruction and updates histogram counters in managed memory
 
 ## How It Works: Host Side (opcode_hist.cu)
 
@@ -82,11 +74,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-The key differences from the basic instruction counter:
-
-1. We extract each instruction's opcode string using `i->getOpcode()`
-2. We maintain a map from opcode strings to numeric IDs
-3. We pass the opcode ID to the device function, allowing it to update the correct histogram slot
+The key differences from the basic instruction counter: we extract each instruction's opcode string using `i->getOpcode()`, maintain a map from opcode strings to numeric IDs, and pass the opcode ID to the device function, allowing it to update the correct histogram slot.
 
 ### 3. Result Reporting
 
@@ -110,10 +98,7 @@ for (auto a : instr_opcode_to_num_map) {
 }
 ```
 
-After kernel execution, we:
-1. Calculate the total instruction count by summing histogram entries
-2. Print overall statistics similar to the instruction counter
-3. Iterate through the opcode map to print each non-zero histogram entry
+After kernel execution, we calculate the total instruction count by summing histogram entries, print overall statistics similar to the instruction counter, and iterate through the opcode map to print each non-zero histogram entry.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -146,10 +131,7 @@ extern "C" __device__ __noinline__ void count_instrs(int predicate,
 }
 ```
 
-Key differences from `instr_count`:
-1. We take an `instr_type` parameter that specifies which histogram bucket to update
-2. We update `hist[instr_type]` instead of a single counter
-3. The same warp/thread-level counting options are supported
+Key differences from `instr_count`: we take an `instr_type` parameter that specifies which histogram bucket to update, update `hist[instr_type]` instead of a single counter, and support the same warp/thread-level counting options.
 
 ## Building the Tool
 
@@ -317,46 +299,16 @@ STL = 20,000  // Local memory stores
 
 ## Analyzing the Histogram
 
-Quick interpretation guide:
-
-1. **Memory Operations** (LDG, STG, LDS, STS):
-   - High percentage → memory-bound, optimize access patterns
-
-2. **Compute Operations** (FADD, FMUL, FFMA, IMAD):
-   - High percentage → compute-bound, maximize occupancy
-
-3. **Control Flow** (BRA, SYNC):
-   - High counts → potential divergence issues
-
-4. **Local Memory** (LDL, STL):
-   - Any count > 0 → register spilling, reduce register usage
-
-5. **Data Movement** (MOV):
-   - Very high counts → compiler not optimizing well
+Quick interpretation guide: **Memory Operations** (LDG, STG, LDS, STS) with high percentage indicate memory-bound code, optimize access patterns. **Compute Operations** (FADD, FMUL, FFMA, IMAD) with high percentage indicate compute-bound code, maximize occupancy. **Control Flow** (BRA, SYNC) with high counts indicate potential divergence issues. **Local Memory** (LDL, STL) with any count > 0 indicates register spilling, reduce register usage. **Data Movement** (MOV) with very high counts indicates compiler not optimizing well.
 
 ## Extending the Tool
 
-You can extend this tool in several ways:
-
-1. **Categorize by instruction type**: Group similar operations (all loads, all math, etc.)
-2. **Track instruction mix over time**: Record histogram at different points in execution
-3. **Focus on hotspots**: Instrument only specific functions or code regions
-4. **Export data**: Write the histogram to a file for offline analysis
+You can extend this tool in several ways: categorize by instruction type (group similar operations like all loads, all math, etc.), track instruction mix over time (record histogram at different points in execution), focus on hotspots (instrument only specific functions or code regions), or export data (write the histogram to a file for offline analysis).
 
 ## Performance Considerations
 
-Like all instruction-level instrumentation, this tool adds overhead. For massive kernels, consider:
-
-1. Instrumenting a subset of instructions using `INSTR_BEGIN`/`INSTR_END`
-2. Sampling by only enabling instrumentation periodically
-3. Using basic block instrumentation concepts (as in `instr_count_bb`) to reduce the number of instrumentation points
+Like all instruction-level instrumentation, this tool adds overhead. For massive kernels, consider instrumenting a subset of instructions using `INSTR_BEGIN`/`INSTR_END`, sampling by only enabling instrumentation periodically, or using basic block instrumentation concepts (as in `instr_count_bb`) to reduce the number of instrumentation points.
 
 ## Next Steps
 
-After understanding your kernel's instruction mix with `opcode_hist`, you might want to:
-
-1. Use `mem_trace` to examine memory access patterns for memory-bound kernels
-2. Try `mov_replace` to see how to replace specific instructions
-3. Create a custom tool that focuses on the specific operations you want to optimize
-
-The opcode histogram is one of the most useful analysis tools for initial CUDA kernel optimization, helping you focus your efforts where they'll have the most impact.
+After understanding your kernel's instruction mix with `opcode_hist`, use `mem_trace` to examine memory access patterns for memory-bound kernels, try `mov_replace` to see how to replace specific instructions, or create a custom tool that focuses on the specific operations you want to optimize. The opcode histogram is one of the most useful analysis tools for initial CUDA kernel optimization, helping you focus your efforts where they'll have the most impact.

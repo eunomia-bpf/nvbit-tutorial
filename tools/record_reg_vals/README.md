@@ -19,44 +19,19 @@ START_GRID_NUM=0 END_GRID_NUM=1 INSTR_BEGIN=10 INSTR_END=15 \
 
 ## Overview
 
-Understanding the dynamic values of registers during kernel execution is invaluable for debugging and performance analysis. The `record_reg_vals` tool:
+Understanding the dynamic values of registers during kernel execution is invaluable for debugging and performance analysis. The `record_reg_vals` tool instruments selected CUDA instructions to capture register values, collects register values from all threads in a warp, transfers this data efficiently from the GPU to the CPU, and prints or analyzes the register state information.
 
-1. Instruments selected CUDA instructions to capture register values
-2. Collects register values from all threads in a warp
-3. Transfers this data efficiently from the GPU to the CPU
-4. Prints or analyzes the register state information
-
-This capability allows developers to:
-- Debug complex kernel issues by examining register values
-- Verify data flow through computation stages
-- Detect value patterns and anomalies
-- Understand divergence between threads in a warp
+This capability allows developers to debug complex kernel issues by examining register values, verify data flow through computation stages, detect value patterns and anomalies, and understand divergence between threads in a warp.
 
 ## Code Structure
 
-The tool consists of three main components:
-
-- `record_reg_vals.cu` – Host-side code that:
-  - Identifies and selects instructions to instrument
-  - Determines which registers to track
-  - Processes and displays register values
-  
-- `inject_funcs.cu` – Device-side code that:
-  - Captures register values from all threads in a warp
-  - Packages data with execution context
-  - Sends the data through a channel to the host
-  
-- `common.h` – Shared structure definition for:
-  - The `reg_info_t` structure that holds the captured register data
+- `record_reg_vals.cu` – Host-side code that identifies and selects instructions to instrument, determines which registers to track, and processes and displays register values
+- `inject_funcs.cu` – Device-side code that captures register values from all threads in a warp, packages data with execution context, and sends the data through a channel to the host
+- `common.h` – Shared structure definition for the `reg_info_t` structure that holds the captured register data
 
 ## How It Works: Register Access with NVBit
 
-NVBit provides special mechanisms to access register values during execution, which is not possible with standard CUDA programming. The core insight is that we can:
-
-1. Identify registers of interest (function parameters, local variables, etc.)
-2. Insert instrumentation to capture their values at specific points
-3. Use warp-level operations to collect values from all threads
-4. Transfer this data to the host for analysis
+NVBit provides special mechanisms to access register values during execution, which is not possible with standard CUDA programming. The core insight is that we can identify registers of interest (function parameters, local variables, etc.), insert instrumentation to capture their values at specific points, use warp-level operations to collect values from all threads, and transfer this data to the host for analysis.
 
 ## How It Works: Host Side (record_reg_vals.cu)
 
@@ -108,16 +83,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-The key aspects of instruction selection and register analysis:
-
-1. We select instructions based on criteria (specific opcodes, instruction types, etc.)
-2. We identify registers of interest in the instruction's operands
-3. We insert a call to `record_reg_val` with:
-   - The instruction's predicate for conditional execution
-   - An opcode ID to identify the instruction type
-   - A pointer to the communication channel
-   - The number of registers to record
-   - The actual register values via `nvbit_add_call_arg_reg_val`
+The key aspects of instruction selection and register analysis: we select instructions based on criteria (specific opcodes, instruction types, etc.), identify registers of interest in the instruction's operands, and insert a call to `record_reg_val` with the instruction's predicate for conditional execution, an opcode ID to identify the instruction type, a pointer to the communication channel, the number of registers to record, and the actual register values via `nvbit_add_call_arg_reg_val`.
 
 ### 2. Receiver Thread for Processing Register Data
 
@@ -163,12 +129,7 @@ void* recv_thread_fun(void* args) {
 }
 ```
 
-The receiver thread:
-1. Continuously polls the channel for new register data
-2. Processes received data as `reg_info_t` structures
-3. Prints context information (CTA coordinates, warp ID, opcode)
-4. Formats and prints the register values for all 32 threads in the warp
-5. Continues until signaled to stop
+The receiver thread continuously polls the channel for new register data, processes received data as `reg_info_t` structures, prints context information (CTA coordinates, warp ID, opcode), formats and prints the register values for all 32 threads in the warp, and continues until signaled to stop.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -224,13 +185,7 @@ extern "C" __device__ __noinline__ void record_reg_val(int pred, int opcode_id,
 }
 ```
 
-Key aspects of this device function:
-
-1. **Predicate handling**: We skip execution if the thread's predicate is false
-2. **Variadic arguments**: We use C's variadic function capability to accept a variable number of register values
-3. **Warp-level collection**: We use `__shfl_sync` to gather each register value from all threads in the warp
-4. **Context capture**: We record CTA coordinates, warp ID, and opcode information
-5. **Channel communication**: Only one thread per warp pushes data to avoid duplicates
+Key aspects of this device function: we skip execution if the thread's predicate is false (predicate handling), use C's variadic function capability to accept a variable number of register values (variadic arguments), use `__shfl_sync` to gather each register value from all threads in the warp (warp-level collection), record CTA coordinates, warp ID, and opcode information (context capture), and ensure only one thread per warp pushes data to avoid duplicates (channel communication).
 
 ## The Register Information Structure (common.h)
 
@@ -249,12 +204,7 @@ typedef struct {
 } reg_info_t;
 ```
 
-This structure captures:
-1. Which thread block (CTA coordinates)
-2. Which warp within the block
-3. What instruction type (opcode_id)
-4. How many registers we're tracking
-5. The register values for all 32 threads in the warp (up to 8 registers per instruction)
+This structure captures which thread block (CTA coordinates), which warp within the block, what instruction type (opcode_id), how many registers we're tracking, and the register values for all 32 threads in the warp (up to 8 registers per instruction).
 
 ## Building the Tool
 
@@ -331,42 +281,16 @@ Monitor which registers are used and how their values change over time to unders
 
 ## Performance Considerations
 
-Register value recording has significant overhead due to:
-1. The additional function calls for instrumented instructions
-2. The collection and communication of register values
-3. The processing and printing of the data
-
-For large applications, consider:
-- Limiting instrumentation to specific instructions of interest
-- Filtering for particular register patterns
-- Sampling rather than capturing all register values
+Register value recording has significant overhead due to the additional function calls for instrumented instructions, the collection and communication of register values, and the processing and printing of the data. For large applications, consider limiting instrumentation to specific instructions of interest, filtering for particular register patterns, or sampling rather than capturing all register values.
 
 ## Extending the Tool
 
-You can extend this tool in several ways:
-
-1. **Selective Register Tracking**: Instrument only instructions that use specific registers
-2. **Value Filtering**: Only report register values that meet certain criteria
-3. **Statistical Analysis**: Compute statistics on register values rather than printing raw data
-4. **Visual Representation**: Output register values in a format suitable for visualization
-5. **Divergence Detection**: Automatically identify and report thread divergence
+You can extend this tool in several ways: selective register tracking (instrument only instructions that use specific registers), value filtering (only report register values that meet certain criteria), statistical analysis (compute statistics on register values rather than printing raw data), visual representation (output register values in a format suitable for visualization), and divergence detection (automatically identify and report thread divergence).
 
 ## Advanced Application: Debugging Numerical Issues
 
-A powerful application of register value recording is debugging numerical issues in scientific computing:
-
-1. **NaN/Infinity Detection**: Track when floating-point values become NaN or infinity
-2. **Precision Loss**: Identify where precision is lost in complex calculations
-3. **Determinism Checking**: Verify that results are consistent across multiple runs
-4. **Boundary Condition Analysis**: Detect when values approach problematic boundaries
+A powerful application of register value recording is debugging numerical issues in scientific computing: NaN/Infinity detection (track when floating-point values become NaN or infinity), precision loss (identify where precision is lost in complex calculations), determinism checking (verify that results are consistent across multiple runs), and boundary condition analysis (detect when values approach problematic boundaries).
 
 ## Next Steps
 
-After mastering register value recording, consider:
-
-1. Creating custom analysis tools for specific patterns or issues
-2. Combining with instruction mix analysis from `opcode_hist`
-3. Correlating register values with memory access patterns from `mem_trace`
-4. Building a visualization tool to better understand register evolution
-
-Register value recording provides a powerful window into the internal state of GPU kernels, enabling debugging and analysis techniques that would otherwise be impossible.
+After mastering register value recording, consider creating custom analysis tools for specific patterns or issues, combining with instruction mix analysis from `opcode_hist`, correlating register values with memory access patterns from `mem_trace`, or building a visualization tool to better understand register evolution. Register value recording provides a powerful window into the internal state of GPU kernels, enabling debugging and analysis techniques that would otherwise be impossible.

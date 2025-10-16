@@ -14,28 +14,12 @@ LD_PRELOAD=./tools/instr_count_bb/instr_count_bb.so ./your_app
 
 A basic block is a sequence of instructions with a single entry point (the first instruction) and a single exit point (the last instruction). No branches exist in the middle of a basic block, and no branches target the middle of a basic block. This property makes basic blocks ideal for efficient instrumentation.
 
-Instead of instrumenting every instruction (as in the basic `instr_count` tool), `instr_count_bb`:
-
-1. Identifies all basic blocks in a function
-2. Instruments only the first instruction of each basic block
-3. Passes the basic block size to the instrumentation function
-4. Updates the counter based on the entire block size
-
-This approach drastically reduces the number of instrumentation points and function calls during execution while still providing an accurate instruction count.
+Instead of instrumenting every instruction (as in the basic `instr_count` tool), `instr_count_bb` identifies all basic blocks in a function, instruments only the first instruction of each basic block, passes the basic block size to the instrumentation function, and updates the counter based on the entire block size. This approach drastically reduces the number of instrumentation points and function calls during execution while still providing an accurate instruction count.
 
 ## Code Structure
 
-The tool consists of:
-
-- `instr_count.cu` – Host code that:
-  - Analyzes kernel code to identify basic blocks
-  - Instruments the first instruction of each basic block
-  - Tracks predicated instructions separately (optional)
-  - Reports results after kernel execution
-  
-- `inject_funcs.cu` – Device code that provides:
-  - `count_instrs` function to increment the counter by the basic block size
-  - `count_pred_off` function to track predicated-off instructions
+- `instr_count.cu` – Host code that analyzes kernel code to identify basic blocks, instruments the first instruction of each basic block, tracks predicated instructions separately (optional), and reports results after kernel execution
+- `inject_funcs.cu` – Device code that provides `count_instrs` (increments the counter by the basic block size) and `count_pred_off` (tracks predicated-off instructions)
 
 ## How It Works: Host Side (instr_count.cu)
 
@@ -87,13 +71,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-Key differences from `instr_count`:
-
-1. We get the static Control Flow Graph (CFG) using `nvbit_get_CFG`
-2. We iterate over basic blocks (`cfg.bbs`) instead of individual instructions
-3. We only instrument the first instruction of each basic block
-4. We pass the entire basic block size as an argument
-5. If predicate tracking is enabled, we instrument those separately
+Key differences from `instr_count`: we get the static Control Flow Graph (CFG) using `nvbit_get_CFG`, iterate over basic blocks (`cfg.bbs`) instead of individual instructions, only instrument the first instruction of each basic block, pass the entire basic block size as an argument, and if predicate tracking is enabled, instrument those separately.
 
 ### 2. Result Reporting
 
@@ -253,11 +231,7 @@ Final sum = 100000.000000; sum/n = 1.000000 (should be ~1)
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Key properties:**
-- Single entry (first instruction)
-- Single exit (last instruction, usually branch)
-- No branches in the middle
-- No jumps targeting the middle
+**Key properties:** Single entry (first instruction), single exit (last instruction, usually branch), no branches in the middle, and no jumps targeting the middle.
 
 ## Performance Benefits
 
@@ -271,10 +245,7 @@ The key advantage of basic block instrumentation is performance:
 | Matrix multiply | 500,000 | 300 | 180x | 4.2x | **43x faster** |
 | Complex ML | 5,000,000 | 2,000 | 250x | 5.8x | **43x faster** |
 
-**Why such a big difference?**
-- `instr_count`: 50,000 function calls + atomic ops
-- `instr_count_bb`: 25 function calls + atomic ops
-- Reduction proportional to basic block size
+**Why such a big difference?** `instr_count` requires 50,000 function calls + atomic ops, while `instr_count_bb` only needs 25 function calls + atomic ops. The reduction is proportional to basic block size.
 
 ### When to Use Each Tool
 
@@ -287,52 +258,22 @@ The basic block approach makes dynamic instrumentation practical for production-
 
 ## How CFG Analysis Works
 
-NVBit provides a static Control Flow Graph (CFG) analysis through `nvbit_get_CFG()`. This analyzes the instruction sequence and branch targets to partition code into basic blocks:
+NVBit provides a static Control Flow Graph (CFG) analysis through `nvbit_get_CFG()`. This analyzes the instruction sequence and branch targets to partition code into basic blocks: each function entry point starts a new basic block, each branch instruction ends a basic block, each branch target starts a new basic block, and instructions between these boundaries form a linear sequence in a single basic block.
 
-1. Each function entry point starts a new basic block
-2. Each branch instruction ends a basic block
-3. Each branch target starts a new basic block
-4. Instructions between these boundaries form a linear sequence in a single basic block
-
-The CFG represents control flow as a directed graph where:
-- Nodes are basic blocks
-- Edges represent possible flow paths
-
-A "degenerate" CFG (indicated by `cfg.is_degenerate`) means that the static analysis couldn't properly identify all basic blocks, usually due to complex control flow patterns or indirect branches.
+The CFG represents control flow as a directed graph where nodes are basic blocks and edges represent possible flow paths. A "degenerate" CFG (indicated by `cfg.is_degenerate`) means that the static analysis couldn't properly identify all basic blocks, usually due to complex control flow patterns or indirect branches.
 
 ## Extending the Tool
 
-The basic block approach can be extended for other analyses:
-
-1. **Path profiling**: Count how many times each control flow path is taken
-2. **Hot spot identification**: Identify the most frequently executed basic blocks
-3. **Dynamic CFG construction**: Build a runtime CFG based on actual execution
-4. **Block-level memory tracking**: Analyze memory access patterns per basic block
+The basic block approach can be extended for other analyses: path profiling (count how many times each control flow path is taken), hot spot identification (identify the most frequently executed basic blocks), dynamic CFG construction (build a runtime CFG based on actual execution), and block-level memory tracking (analyze memory access patterns per basic block).
 
 ## When to Use Basic Block Instrumentation
 
-Basic block instrumentation is ideal for:
-
-1. Large, complex kernels where instrumentation overhead matters
-2. Production profiling where minimizing slowdown is important
-3. Tools that need to collect aggregate statistics rather than per-instruction data
-
-For analyses that need instruction-specific details (like the opcode histogram), you'll still need to instrument individual instructions.
+Basic block instrumentation is ideal for large, complex kernels where instrumentation overhead matters, production profiling where minimizing slowdown is important, and tools that need to collect aggregate statistics rather than per-instruction data. For analyses that need instruction-specific details (like the opcode histogram), you'll still need to instrument individual instructions.
 
 ## Limitations
 
-A few limitations to be aware of:
-
-1. Cannot capture instruction-specific behavior within a basic block
-2. The static CFG analysis may miss some control flow paths for complex code
-3. Some GPU architectures may have special cases that affect basic block identification
+Cannot capture instruction-specific behavior within a basic block. The static CFG analysis may miss some control flow paths for complex code. Some GPU architectures may have special cases that affect basic block identification.
 
 ## Next Steps
 
-After understanding basic block instrumentation, consider:
-
-1. Combining this approach with `mem_trace` for efficient memory access analysis
-2. Using the CFG information to build visualization tools for kernel control flow
-3. Implementing more sophisticated analyses like critical path identification
-
-Basic block instrumentation is a powerful technique that balances detail and performance, making it ideal for many CUDA analysis tools.
+After understanding basic block instrumentation, consider combining this approach with `mem_trace` for efficient memory access analysis, using the CFG information to build visualization tools for kernel control flow, or implementing more sophisticated analyses like critical path identification. Basic block instrumentation is a powerful technique that balances detail and performance, making it ideal for many CUDA analysis tools.

@@ -35,29 +35,14 @@ __global__ void kernel() {
 
 ## Overview
 
-The `mem_printf2` tool provides a simplified printf-like functionality for GPU code. Traditional debugging methods like CPU-side printf or debuggers have limitations when working with GPU code:
+The `mem_printf2` tool provides a simplified printf-like functionality for GPU code. Traditional debugging methods like CPU-side printf or debuggers have limitations when working with GPU code: standard `printf` doesn't work in GPU code across all CUDA versions, CPU debuggers can't easily step through thousands of concurrent GPU threads, and adding instrumentation often requires modifying the original source code.
 
-1. Standard `printf` doesn't work in GPU code across all CUDA versions
-2. CPU debuggers can't easily step through thousands of concurrent GPU threads
-3. Adding instrumentation often requires modifying the original source code
-
-This tool addresses these issues by:
-1. Intercepting memory operations using NVBit
-2. Adding instrumentation to format and send custom messages back to the host
-3. Processing these messages on the CPU side without modifying the original application
+This tool addresses these issues by intercepting memory operations using NVBit, adding instrumentation to format and send custom messages back to the host, and processing these messages on the CPU side without modifying the original application.
 
 ## Code Structure
 
-The tool consists of two main components:
-
-- `mem_trace.cu` – Host-side code that:
-  - Sets up a communication channel between GPU and CPU
-  - Instruments memory operations in CUDA kernels
-  - Receives and prints messages from GPU code
-  
-- `inject_funcs.cu` – Device-side code that:
-  - Formats a message when a memory instruction executes
-  - Sends the message through the channel to the host
+- `mem_trace.cu` – Host-side code that sets up a communication channel between GPU and CPU, instruments memory operations in CUDA kernels, and receives and prints messages from GPU code
+- `inject_funcs.cu` – Device-side code that formats a message when a memory instruction executes and sends the message through the channel to the host
 
 ## How It Works: Communication Channel
 
@@ -99,10 +84,7 @@ void init_context_state(CUcontext ctx) {
 }
 ```
 
-When a CUDA context is created, we:
-1. Create a device channel in CUDA managed memory
-2. Initialize a host channel with a callback function
-3. Start a receiver thread that processes messages
+When a CUDA context is created, we create a device channel in CUDA managed memory, initialize a host channel with a callback function, and start a receiver thread that processes messages.
 
 ### 2. Instrumentation Logic
 
@@ -146,15 +128,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-The key aspects of instrumentation:
-1. We filter for memory instructions
-2. For each memory instruction, we insert a call to `instrument_mem`
-3. We pass several arguments:
-   - The instruction's predicate
-   - The opcode ID
-   - The memory address
-   - The grid launch ID
-   - A pointer to the communication channel
+The key aspects of instrumentation: we filter for memory instructions, insert a call to `instrument_mem` for each memory instruction, and pass several arguments (the instruction's predicate, the opcode ID, the memory address, the grid launch ID, and a pointer to the communication channel).
 
 ### 3. Receiver Thread
 
@@ -182,10 +156,7 @@ void* recv_thread_fun(void* args) {
 }
 ```
 
-The receiver thread:
-1. Continuously polls the channel for new data
-2. When data is received, it simply prints the message
-3. Unlike more complex tools, it doesn't need to parse a specific data structure
+The receiver thread continuously polls the channel for new data and simply prints the message when data is received. Unlike more complex tools, it doesn't need to parse a specific data structure.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -212,10 +183,7 @@ extern "C" __device__ __noinline__ void instrument_mem(int pred, int opcode_id,
 }
 ```
 
-Key aspects of the device function:
-1. We check if the thread is predicated (should execute)
-2. We create a simple message (which could be customized)
-3. We push the message to the channel for transmission to the host
+Key aspects of the device function: we check if the thread is predicated (should execute), create a simple message (which could be customized), and push the message to the channel for transmission to the host.
 
 ## Building the Tool
 
@@ -256,77 +224,24 @@ PRINTF2: Entering branch at block (2,1,0)
 
 ## Extending the Tool for Real Debugging
 
-While the example shows a simple fixed message, you can extend it for powerful debugging:
-
-### 1. Custom Message Formatting
-
-Implement a GPU-side formatting function to include:
-- Thread and block indices
-- Memory addresses and values
-- Variable values and state information
-- Execution paths and conditional branches
-
-### 2. Selective Instrumentation
-
-Modify the host-side code to only instrument:
-- Specific functions or kernels
-- Particular regions of interest
-- Instructions matching certain patterns
-
-### 3. Conditional Messaging
-
-Add conditions in the device function to only print messages when:
-- Specific values are encountered
-- Errors or boundary conditions occur
-- Execution reaches particular code paths
+While the example shows a simple fixed message, you can extend it for powerful debugging. Implement a GPU-side formatting function to include thread and block indices, memory addresses and values, variable values and state information, and execution paths and conditional branches. Modify the host-side code to only instrument specific functions or kernels, particular regions of interest, or instructions matching certain patterns. Add conditions in the device function to only print messages when specific values are encountered, errors or boundary conditions occur, or execution reaches particular code paths.
 
 ## Applications
 
-This simple printf-like functionality has numerous applications:
-
-1. **Debugging Complex Kernels**: Print internal state at key points
-2. **Algorithm Verification**: Trace execution paths and intermediate results
-3. **Performance Analysis**: Track memory access patterns and execution flow
-4. **Error Detection**: Identify when and where invalid values appear
+This simple printf-like functionality has numerous applications: debugging complex kernels (print internal state at key points), algorithm verification (trace execution paths and intermediate results), performance analysis (track memory access patterns and execution flow), and error detection (identify when and where invalid values appear).
 
 ## Advantages Over Traditional Methods
 
-Compared to other debugging approaches, this tool offers several advantages:
-
-1. **Non-invasive**: Doesn't require modifying application source code
-2. **Selective**: Can be applied to specific instructions
-3. **Low overhead**: Minimal impact when not actively printing
-4. **Thread-specific**: Can identify which thread generated each message
+Compared to other debugging approaches, this tool offers several advantages: non-invasive (doesn't require modifying application source code), selective (can be applied to specific instructions), low overhead (minimal impact when not actively printing), and thread-specific (can identify which thread generated each message).
 
 ## Performance Considerations
 
-While useful for debugging, consider these performance implications:
-
-1. **Channel Congestion**: Too many messages can overflow the channel
-2. **Execution Overhead**: Each instrumented instruction takes longer
-3. **Memory Overhead**: Large messages consume more bandwidth
-
-For optimal use:
-- Be selective about which instructions trigger messages
-- Keep messages concise
-- Consider filtering messages on the device side
+While useful for debugging, consider these performance implications: channel congestion (too many messages can overflow the channel), execution overhead (each instrumented instruction takes longer), and memory overhead (large messages consume more bandwidth). For optimal use, be selective about which instructions trigger messages, keep messages concise, and consider filtering messages on the device side.
 
 ## Building Your Own Printf Tool
 
-You can customize this tool for your specific needs:
-
-1. **Custom Data Structures**: Send structured data instead of text
-2. **Advanced Filtering**: Only report interesting events
-3. **Integration with Analysis**: Process messages for automatic analysis
-4. **Pattern Detection**: Look for specific sequences of events
+You can customize this tool for your specific needs: custom data structures (send structured data instead of text), advanced filtering (only report interesting events), integration with analysis (process messages for automatic analysis), and pattern detection (look for specific sequences of events).
 
 ## Next Steps
 
-After mastering basic GPU-to-CPU communication with `mem_printf2`, consider:
-
-1. Implementing a more sophisticated printf with formatting support
-2. Creating a conditional debugging system that triggers on specific events
-3. Building a hybrid analysis tool that combines printf with other instrumentation
-4. Developing a real-time visualization of GPU execution based on the messages
-
-The ability to send messages from GPU to CPU opens up numerous possibilities for understanding and debugging GPU code that would otherwise be difficult to inspect.
+After mastering basic GPU-to-CPU communication with `mem_printf2`, consider implementing a more sophisticated printf with formatting support, creating a conditional debugging system that triggers on specific events, building a hybrid analysis tool that combines printf with other instrumentation, or developing a real-time visualization of GPU execution based on the messages. The ability to send messages from GPU to CPU opens up numerous possibilities for understanding and debugging GPU code that would otherwise be difficult to inspect.

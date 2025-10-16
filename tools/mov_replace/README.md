@@ -14,33 +14,14 @@ This tool has 100-1000x overhead. Use only for:
 
 ## Overview
 
-The `mov_replace` tool intercepts all MOV (move) instructions in a CUDA kernel and replaces them with calls to a custom device function that performs the equivalent operation. This demonstrates several advanced capabilities of NVBit:
+The `mov_replace` tool intercepts all MOV (move) instructions in a CUDA kernel and replaces them with calls to a custom device function that performs the equivalent operation. This demonstrates several advanced capabilities of NVBit: removing original instructions, reading and writing registers directly, handling different operand types (immediate values, registers, uniform registers), and preserving the original semantics of an instruction.
 
-1. Removing original instructions
-2. Reading and writing registers directly
-3. Handling different operand types (immediate values, registers, uniform registers)
-4. Preserving the original semantics of an instruction
-
-While this specific example simply replicates the MOV functionality, the same approach can be extended to:
-- Add logging/profiling to specific instructions
-- Implement custom versions of operations for debugging
-- Simulate architectural features not present in hardware
-- Test alternative implementations of operations
+While this specific example simply replicates the MOV functionality, the same approach can be extended to add logging/profiling to specific instructions, implement custom versions of operations for debugging, simulate architectural features not present in hardware, or test alternative implementations of operations.
 
 ## Code Structure
 
-The tool consists of two main components:
-
-- `mov_replace.cu` – Host-side code that:
-  - Identifies MOV instructions
-  - Analyzes operand types
-  - Removes original instructions
-  - Inserts calls to the custom replacement function
-  
-- `inject_funcs.cu` – Device-side code that:
-  - Implements the `mov_replace` function
-  - Uses register access intrinsics to read/write registers
-  - Handles various operand types
+- `mov_replace.cu` – Host-side code that identifies MOV instructions, analyzes operand types, removes original instructions, and inserts calls to the custom replacement function
+- `inject_funcs.cu` – Device-side code that implements the `mov_replace` function, uses register access intrinsics to read/write registers, and handles various operand types
 
 ## How It Works: Host Side (mov_replace.cu)
 
@@ -127,19 +108,7 @@ void instrument_function_if_needed(CUcontext ctx, CUfunction func) {
 }
 ```
 
-The key steps in this function are:
-
-1. **Identify MOV instructions**: We look for instructions with opcodes starting with "MOV"
-2. **Analyze operands**: MOV instructions have two operands:
-   - The first (destination) is always a register
-   - The second (source) can be a register, uniform register, immediate value, or constant bank
-3. **Insert replacement call**: We insert a call to our custom `mov_replace` function
-4. **Pass arguments**:
-   - The instruction's predicate (to handle conditional execution)
-   - The destination register number
-   - The source (either a register number or immediate value)
-   - A flag indicating the source type
-5. **Remove original instruction**: The critical `nvbit_remove_orig(instr)` call removes the original MOV instruction
+The key steps in this function: identify MOV instructions (look for instructions with opcodes starting with "MOV"), analyze operands (MOV instructions have two operands—the first destination is always a register, the second source can be a register, uniform register, immediate value, or constant bank), insert replacement call (insert a call to our custom `mov_replace` function), pass arguments (the instruction's predicate to handle conditional execution, the destination register number, the source either a register number or immediate value, and a flag indicating the source type), and remove original instruction (the critical `nvbit_remove_orig(instr)` call removes the original MOV instruction).
 
 ### 2. CUDA Event Callback
 
@@ -161,11 +130,7 @@ void nvbit_at_cuda_event(CUcontext ctx, int is_exit, nvbit_api_cuda_t cbid,
 }
 ```
 
-This callback is simpler than in other tools:
-1. We intercept kernel launches
-2. We instrument the function if needed
-3. We enable our instrumented version
-4. We don't need to maintain counters or print results
+This callback is simpler than in other tools: we intercept kernel launches, instrument the function if needed, enable our instrumented version, and don't need to maintain counters or print results.
 
 ## How It Works: Device Side (inject_funcs.cu)
 
@@ -198,23 +163,11 @@ extern "C" __device__ __noinline__ void mov_replace(int pred, int reg_dst_num,
 }
 ```
 
-Key aspects of this function:
-
-1. **Predicate handling**: Skip execution if the instruction's predicate is false
-2. **Register-to-register move**: If source is a register, read its value with `nvbit_read_reg` and write to destination
-3. **Uniform register handling**: If source is a uniform register, use `nvbit_read_ureg` instead
-4. **Immediate value handling**: If source is an immediate value, write it directly to the destination register
-5. **Register access intrinsics**: The NVBit-provided intrinsics `nvbit_read_reg`, `nvbit_read_ureg`, and `nvbit_write_reg` allow direct manipulation of GPU registers
+Key aspects of this function: skip execution if the instruction's predicate is false (predicate handling), read register value with `nvbit_read_reg` and write to destination for register-to-register move, use `nvbit_read_ureg` for uniform register handling, write immediate value directly to the destination register (immediate value handling), and use NVBit-provided intrinsics `nvbit_read_reg`, `nvbit_read_ureg`, and `nvbit_write_reg` that allow direct manipulation of GPU registers (register access intrinsics).
 
 ## Register Access Intrinsics
 
-NVBit provides special intrinsics for direct register access that are essential for instruction replacement:
-
-1. **nvbit_read_reg(reg_num)**: Reads the value of a vector register
-2. **nvbit_read_ureg(reg_num)**: Reads the value of a uniform register
-3. **nvbit_write_reg(reg_num, value)**: Writes a value to a register
-
-These intrinsics are implemented by the NVBit framework and allow our custom function to behave like a real GPU instruction.
+NVBit provides special intrinsics for direct register access that are essential for instruction replacement: `nvbit_read_reg(reg_num)` (reads the value of a vector register), `nvbit_read_ureg(reg_num)` (reads the value of a uniform register), and `nvbit_write_reg(reg_num, value)` (writes a value to a register). These intrinsics are implemented by the NVBit framework and allow our custom function to behave like a real GPU instruction.
 
 ## Building the Tool
 
@@ -252,11 +205,7 @@ The tool supports these environment variables:
 
 ## Verifying the Replacement
 
-Since this tool replaces instructions with functionally equivalent implementations, the application should produce identical results. To verify that the replacement is working:
-
-1. **Run with verbose output**: Set `TOOL_VERBOSE=1` to see which MOV instructions are being replaced
-2. **Examine with `nvdisasm`**: Disassemble the original and instrumented versions of the kernel to see the difference
-3. **Compare results**: Run the application with and without the tool to ensure output is identical
+Since this tool replaces instructions with functionally equivalent implementations, the application should produce identical results. To verify that the replacement is working, run with verbose output (set `TOOL_VERBOSE=1` to see which MOV instructions are being replaced), examine with `nvdisasm` (disassemble the original and instrumented versions of the kernel to see the difference), and compare results (run the application with and without the tool to ensure output is identical).
 
 ## Understanding GPU Assembly (SASS)
 
@@ -311,50 +260,20 @@ __device__ void add_replace(int pred, int dst, int src1, int src2, ...) {
 
 ## Extending the Tool
 
-Practical extensions:
-
-1. **Instruction tracing**: Log when/where instructions execute
-2. **Fault injection**: Deliberately corrupt values to test resilience
-3. **Value tracking**: Monitor specific register values
-4. **Custom operations**: Implement ops not in hardware
+Practical extensions: instruction tracing (log when/where instructions execute), fault injection (deliberately corrupt values to test resilience), value tracking (monitor specific register values), and custom operations (implement ops not in hardware).
 
 ## Advanced Applications
 
-Instruction replacement can be used for sophisticated applications:
-
-1. **Fault injection**: Deliberately introduce errors to test resilience
-2. **Performance modeling**: Add delays to simulate different hardware
-3. **Custom operations**: Implement operations not available in hardware
-4. **Security analysis**: Track information flow through registers
+Instruction replacement can be used for sophisticated applications: fault injection (deliberately introduce errors to test resilience), performance modeling (add delays to simulate different hardware), custom operations (implement operations not available in hardware), and security analysis (track information flow through registers).
 
 ## Performance Considerations
 
-Replacing instructions with function calls has significant overhead:
-
-1. **Function call overhead**: Each replaced instruction requires state saving/restoring
-2. **Register access cost**: Register reads/writes via intrinsics are slower than native instructions
-3. **Execution divergence**: Custom handling of predicates may cause additional warp divergence
-
-This approach is primarily for analysis, debugging, or research rather than production use.
+Replacing instructions with function calls has significant overhead: function call overhead (each replaced instruction requires state saving/restoring), register access cost (register reads/writes via intrinsics are slower than native instructions), and execution divergence (custom handling of predicates may cause additional warp divergence). This approach is primarily for analysis, debugging, or research rather than production use.
 
 ## Understanding NVBit's Capabilities
 
-This tool demonstrates several key NVBit capabilities:
-
-1. **Instruction removal**: `nvbit_remove_orig` allows removing original instructions
-2. **Register access**: Special intrinsics enable reading and writing registers
-3. **Operand analysis**: NVBit's API provides detailed information about instruction operands
-4. **Constant values**: `nvbit_add_call_arg_cbank_val` allows accessing constant memory values
-
-These capabilities make NVBit a powerful platform for GPU code manipulation and analysis.
+This tool demonstrates several key NVBit capabilities: instruction removal (`nvbit_remove_orig` allows removing original instructions), register access (special intrinsics enable reading and writing registers), operand analysis (NVBit's API provides detailed information about instruction operands), and constant values (`nvbit_add_call_arg_cbank_val` allows accessing constant memory values). These capabilities make NVBit a powerful platform for GPU code manipulation and analysis.
 
 ## Next Steps
 
-After understanding instruction replacement, consider:
-
-1. Using `opcode_hist` to identify other common instructions to replace
-2. Combining with `mem_trace` to add custom memory access handling
-3. Creating a tool that implements custom versions of compute operations
-4. Exploring how instruction replacement affects performance
-
-Instruction replacement provides the deepest level of control over GPU execution in the NVBit framework and opens up possibilities for sophisticated GPU code analysis and transformation.
+After understanding instruction replacement, consider using `opcode_hist` to identify other common instructions to replace, combining with `mem_trace` to add custom memory access handling, creating a tool that implements custom versions of compute operations, or exploring how instruction replacement affects performance. Instruction replacement provides the deepest level of control over GPU execution in the NVBit framework and opens up possibilities for sophisticated GPU code analysis and transformation.
