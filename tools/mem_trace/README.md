@@ -7,8 +7,8 @@
 **Quick Start:**
 ```bash
 # Warning: High overhead! Instrument only first kernel
-START_GRID_NUM=0 END_GRID_NUM=1 \
-  LD_PRELOAD=./tools/mem_trace/mem_trace.so ./app > trace.txt
+env START_GRID_NUM=0 END_GRID_NUM=1 \
+  CUDA_INJECTION64_PATH=./tools/mem_trace/mem_trace.so ./test-apps/vectoradd/vectoradd > trace.txt
 ```
 
 **Typical Output:**
@@ -247,10 +247,10 @@ The build process follows the same pattern as other NVBit tools:
 
 ## Running the Tool
 
-Launch your CUDA application with the tool preloaded:
+Launch your CUDA application with the tool injected:
 
 ```bash
-LD_PRELOAD=./tools/mem_trace/mem_trace.so ./your_cuda_application
+env CUDA_INJECTION64_PATH=./tools/mem_trace/mem_trace.so ./your_cuda_application
 ```
 
 ### Environment Variables
