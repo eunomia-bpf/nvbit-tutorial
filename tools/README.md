@@ -1,25 +1,21 @@
 # NVBit Tutorial Tools
 
-This directory contains a collection of example instrumentation tools built with NVBit (NVIDIA Binary Instrumentation Tool). Each tool demonstrates different capabilities of NVBit and serves as a starting point for developing your own instrumentation tools.
+This directory contains example instrumentation tools built with NVBit (NVIDIA Binary Instrumentation Tool). Each tool demonstrates different capabilities and serves as a starting point for developing your own instrumentation tools.
 
 ## Overview of Tools
 
-1. **instr_count** - Basic instruction counting tool
-2. **opcode_hist** - Histogram of executed instructions by opcode
-3. **record_reg_vals** - Records register values during execution
-4. **instr_count_bb** - Instruction counting at basic block level
-5. **instr_count_cuda_graph** - Instruction counting for CUDA graph execution
-6. **mem_printf2** - Memory access printing tool
-7. **mem_trace** - Memory trace collection tool
-8. **mov_replace** - MOV instruction replacement example
+- **instr_count** - Basic instruction counting tool
+- **opcode_hist** - Histogram of executed instructions by opcode
+- **record_reg_vals** - Records register values during execution
+- **instr_count_bb** - Instruction counting at basic block level
+- **instr_count_cuda_graph** - Instruction counting for CUDA graph execution
+- **mem_printf2** - Memory access printing tool
+- **mem_trace** - Memory trace collection tool
+- **mov_replace** - MOV instruction replacement example
 
 ## Common Structure
 
-Each tool typically consists of:
-- **Host-side code** (.cu file with the same name as the tool) - Sets up instrumentation, manages callbacks, and processes results
-- **Device-side code** (usually inject_funcs.cu) - Contains functions injected into the GPU code
-- **Makefile** - Compiles the tool into a shared library (.so)
-- **README.md** - Documentation for the specific tool
+Each tool typically consists of host-side code (.cu file with the same name as the tool) that sets up instrumentation, manages callbacks, and processes results; device-side code (usually inject_funcs.cu) that contains functions injected into the GPU code; a Makefile that compiles the tool into a shared library (.so); and a README.md with documentation for the specific tool.
 
 ## Running the Tools
 
@@ -46,37 +42,21 @@ LD_PRELOAD=../../tools/instr_count/instr_count.so ./vectoradd
 
 ## Tool-Specific Information
 
-### instr_count
+- **instr_count** counts dynamic instructions executed by each kernel by instrumenting every instruction and incrementing a counter for each execution.
 
-Counts dynamic instructions executed by each kernel. It instruments every instruction and increments a counter for each execution.
+- **opcode_hist** builds a histogram of instruction opcodes, showing which types of instructions are most common in your application.
 
-### opcode_hist
+- **record_reg_vals** records register values during kernel execution, allowing analysis of data flow.
 
-Builds a histogram of instruction opcodes, showing which types of instructions are most common in your application.
+- **instr_count_bb** is similar to instr_count but instruments at basic block level for better performance.
 
-### record_reg_vals
+- **instr_count_cuda_graph** extends instruction counting to handle CUDA graphs (a more advanced CUDA feature).
 
-Records register values during kernel execution, allowing analysis of data flow.
+- **mem_printf2** prints memory access information during execution.
 
-### instr_count_bb
+- **mem_trace** captures detailed memory access traces for analysis, using a channel-based approach to send data from GPU to CPU.
 
-Similar to instr_count but instruments at basic block level for better performance.
-
-### instr_count_cuda_graph
-
-Extends instruction counting to handle CUDA graphs (a more advanced CUDA feature).
-
-### mem_printf2
-
-Prints memory access information during execution.
-
-### mem_trace
-
-Captures detailed memory access traces for analysis, using a channel-based approach to send data from GPU to CPU.
-
-### mov_replace
-
-Demonstrates how to replace specific instructions (MOV in this case) with custom implementations.
+- **mov_replace** demonstrates how to replace specific instructions (MOV in this case) with custom implementations.
 
 ## Developing Your Own Tools
 

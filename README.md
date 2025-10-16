@@ -4,7 +4,7 @@
 >
 > Official NVBit repo: <https://github.com/NVlabs/NVBit>
 
-This repository provides a comprehensive, blog-style tutorial for learning NVIDIA Binary Instrumentation Tool (NVBit). It offers detailed, step-by-step guidance with in-depth explanations of code to help you understand GPU binary instrumentation concepts and techniques.
+This repository provides a comprehensive, blog-style tutorial (Unofficial) for learning NVIDIA Binary Instrumentation Tool (NVBit). It offers detailed, step-by-step guidance with in-depth explanations of code to help you understand GPU binary instrumentation concepts and techniques.
 
 NVBit is covered by the same End User License Agreement as that of the
 NVIDIA CUDA Toolkit. By using NVBit you agree to End User License Agreement
@@ -31,49 +31,32 @@ described in the EULA.txt file.
 Get started with NVBit in just a few minutes:
 
 ```bash
-# 1. Ensure CUDA toolkit is installed and nvdisasm is in PATH
+# Ensure CUDA toolkit is installed and nvdisasm is in PATH
 export PATH=/usr/local/cuda/bin:$PATH
 
-# 2. Clone this repository (if you haven't already)
+# Clone this repository (if you haven't already)
 cd nvbit-tutorial
 
-# 3. Build all tools
-cd tools
-make
-cd ..
+# Build all tools
+cd tools && make && cd ..
 
-# 4. Build test applications
-cd test-apps
-make
-cd ..
+# Build test applications
+cd test-apps && make && cd ..
 
-# 5. Run your first instrumentation (instruction counting)
+# Run your first instrumentation (instruction counting)
 LD_PRELOAD=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 
-# 6. You should see output like:
+# You should see output like:
 # kernel 0 - vecAdd(...) - #thread-blocks 98, kernel instructions 50077, total instructions 50077
 ```
 
-**Next Steps:**
-- Read the [instr_count tutorial](tools/instr_count/README.md) to understand how it works
-- Try [opcode_hist](tools/opcode_hist/README.md) to analyze instruction mix
-- See [FAQ](#frequently-asked-questions) if you encounter issues
+**Next Steps:** Read the [instr_count tutorial](tools/instr_count/README.md), try [opcode_hist](tools/opcode_hist/README.md) to analyze instruction mix, or see [FAQ](#frequently-asked-questions) if you encounter issues.
 
 ## About This Tutorial Repository
 
-This tutorial repository goes beyond basic examples to provide:
+This tutorial repository goes beyond basic examples with detailed blog-style documentation for each tool with comprehensive code explanations, step-by-step implementation guides showing how each tool is built, visual diagrams and examples to illustrate key concepts, best practices and performance considerations, and extension ideas for developing your own custom tools.
 
-- **Detailed Blog-Style Documentation** for each tool with comprehensive code explanations
-- **Step-by-Step Implementation Guides** showing how each tool is built
-- **Visual Diagrams and Examples** to illustrate key concepts
-- **Best Practices and Performance Considerations**
-- **Extension Ideas** for developing your own custom tools
-
-The repository contains:
-
-- **Core NVBit Library** (`core/`) - The main NVBit library and header files
-- **Example Tools** (`tools/`) - A collection of practical instrumentation tools with detailed explanations
-- **Test Applications** (`test-apps/`) - Simple CUDA applications to demonstrate the tools
+The repository contains the core NVBit library (`core/`) with the main library and header files, example tools (`tools/`) with practical instrumentation tools and detailed explanations, and test applications (`test-apps/`) with simple CUDA applications to demonstrate the tools.
 
 Each tool in the `tools/` directory includes a comprehensive tutorial README that walks through the code line-by-line, explains the build process, and describes how to interpret the output.
 
@@ -81,27 +64,23 @@ Each tool in the `tools/` directory includes a comprehensive tutorial README tha
 
 ### Required Software
 
-1. **CUDA Toolkit** (>= 12.0)
-   - Download from [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-downloads)
-   - Verify installation: `nvcc --version`
+**CUDA Toolkit** (>= 12.0) - Download from [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-downloads). Verify installation: `nvcc --version`
 
-2. **nvdisasm** (included with CUDA Toolkit)
-   ```bash
-   # Add CUDA bin directory to PATH
-   export PATH=/usr/local/cuda/bin:$PATH
-   # Or for specific version:
-   export PATH=/usr/local/cuda-12.8/bin:$PATH
+**nvdisasm** (included with CUDA Toolkit)
+```bash
+# Add CUDA bin directory to PATH
+export PATH=/usr/local/cuda/bin:$PATH
+# Or for specific version:
+export PATH=/usr/local/cuda-12.8/bin:$PATH
 
-   # Verify nvdisasm is accessible
-   which nvdisasm
-   ```
-   **⚠️ IMPORTANT:** NVBit requires `nvdisasm` to be in your PATH. Without it, tools will fail to run.
+# Verify nvdisasm is accessible
+which nvdisasm
+```
+**⚠️ IMPORTANT:** NVBit requires `nvdisasm` to be in your PATH. Without it, tools will fail to run.
 
-3. **GCC** (>= 8.5.0 for x86_64; >= 8.5.0 for aarch64)
-   - Verify: `gcc --version`
+**GCC** (>= 8.5.0 for x86_64; >= 8.5.0 for aarch64) - Verify: `gcc --version`
 
-4. **Make**
-   - Verify: `make --version`
+**Make** - Verify: `make --version`
 
 ### Supported Hardware
 
@@ -195,14 +174,7 @@ This repository has been successfully tested on the following configuration:
 
 This repository uses **NVBit v1.7.6** which includes support for newer CUDA versions and SM architectures up to SM_120.
 
-NVBit is provided in this repository with the following structure:
-1. A ```core``` folder, which contains the main static library
-```libnvbit.a``` and various headers files (among which the ```nvbit.h```
-file which contains all the main NVBit APIs declarations).
-2. A ```tools``` folder, which contains various source code examples of NVBit
-tools with detailed tutorial documentation. After learning from these examples, you can make a copy of one and modify it to create your own tool.
-3. A ```test-apps``` folder, which contains a simple application that can be
-used to test NVBit tools. It features a simple vector addition program.
+NVBit is provided in this repository with the `core` folder containing the main static library `libnvbit.a` and header files (including `nvbit.h` with all main NVBit APIs declarations), the `tools` folder with various source code examples and detailed tutorial documentation, and the `test-apps` folder with simple applications to test NVBit tools (like a vector addition program). After learning from these examples, you can copy and modify one to create your own tool.
 
 ## Building the Tools and Test Applications
 
@@ -281,14 +253,12 @@ Before running an NVBit tool, make sure ```nvdisasm``` is in your PATH. In
 Ubuntu distributions, this is typically done by adding `/usr/local/cuda/bin` or
 `/usr/local/cuda-"version"/bin` to the PATH environment variable.
 
-To use an NVBit tool, you can either:
-
-1. LD_PRELOAD the tool before the application command:
+To use an NVBit tool, either LD_PRELOAD the tool before the application command:
 ```bash
 LD_PRELOAD=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 ```
 
-2. Or use CUDA_INJECTION64_PATH:
+Or use CUDA_INJECTION64_PATH:
 ```bash
 CUDA_INJECTION64_PATH=./tools/instr_count/instr_count.so ./test-apps/vectoradd/vectoradd
 ```
@@ -298,25 +268,11 @@ thus they cannot be used together.
 
 ## Key Concepts Covered in This Tutorial
 
-Throughout the tutorial, you'll learn important concepts in GPU binary instrumentation:
-
-1. **SASS Instruction Analysis** - Understanding GPU assembly instructions
-2. **Function Instrumentation** - Adding code to existing GPU functions
-3. **Basic Block Analysis** - Working with control flow graphs
-4. **Memory Access Tracking** - Capturing and analyzing memory patterns
-5. **Efficient Communication** - Moving data between GPU and CPU
-6. **Register Manipulation** - Reading and writing GPU registers directly
-7. **Instruction Replacement** - Modifying the behavior of GPU code
-8. **Performance Optimization** - Minimizing instrumentation overhead
+Throughout the tutorial, you'll learn important concepts in GPU binary instrumentation: SASS instruction analysis (understanding GPU assembly), function instrumentation (adding code to existing GPU functions), basic block analysis (working with control flow graphs), memory access tracking (capturing and analyzing memory patterns), efficient GPU-CPU communication, register manipulation (reading and writing GPU registers directly), instruction replacement (modifying GPU code behavior), and performance optimization (minimizing instrumentation overhead).
 
 ## Creating Your Own Tools
 
-After working through the examples, you'll be ready to create your own custom instrumentation tools. The repository includes templates and guidance for:
-
-1. **Tool Structure** - Understanding the host/device code organization
-2. **Build Systems** - Setting up Makefiles for your tools
-3. **Common Patterns** - Reusing code for frequently needed functionality
-4. **Debugging Techniques** - Troubleshooting instrumentation issues
+After working through the examples, you'll be ready to create your own custom instrumentation tools. The repository includes templates and guidance for tool structure (understanding host/device code organization), build systems (setting up Makefiles), common patterns (reusing code for frequently needed functionality), and debugging techniques (troubleshooting instrumentation issues).
 
 ## Frequently Asked Questions
 
@@ -407,20 +363,14 @@ g++ -shared -o mytool.so $(OBJECTS) -L$(CUDA_LIB) -lcuda -lcudart_static
 
 #### 3. Tool loads but produces no output
 
-**Possible Causes:**
-- Check if nvdisasm is in PATH
-- Verify the tool compiled successfully (check for `.so` file)
-- Try with `TOOL_VERBOSE=1` to see what's happening:
-  ```bash
-  TOOL_VERBOSE=1 LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app
-  ```
+**Possible Causes:** Check if nvdisasm is in PATH, verify the tool compiled successfully (check for `.so` file), or try with `TOOL_VERBOSE=1`:
+```bash
+TOOL_VERBOSE=1 LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app
+```
 
 #### 4. "CUDA_ERROR_INVALID_VALUE" or segmentation fault
 
-**Possible Causes:**
-- GPU compute capability not supported (need SM 3.5+)
-- Driver version too old or too new (need <= 575.xx)
-- Concurrent use with nvprof/nsight (NVBit cannot run with these tools)
+**Possible Causes:** GPU compute capability not supported (need SM 3.5+), driver version too old or too new (need <= 575.xx), or concurrent use with nvprof/nsight (NVBit cannot run with these tools).
 
 **Solution:**
 ```bash
@@ -441,34 +391,20 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 #### 6. Application crashes with instrumentation
 
-**Debugging Steps:**
-1. Verify the app works without instrumentation: `./your_app`
-2. Test with the simplest tool: `LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app`
-3. Use selective instrumentation:
-   ```bash
-   KERNEL_BEGIN=0 KERNEL_END=1 LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app
-   ```
+**Debugging Steps:** Verify the app works without instrumentation (`./your_app`), test with the simplest tool (`LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app`), or use selective instrumentation:
+```bash
+KERNEL_BEGIN=0 KERNEL_END=1 LD_PRELOAD=./tools/instr_count/instr_count.so ./your_app
+```
 
 ### Getting More Help
 
-- Read tool-specific READMEs in `tools/TOOLNAME/README.md`
-- Examine `core/nvbit.h` for API documentation
-- Report issues at the GitHub repository
+Read tool-specific READMEs in `tools/TOOLNAME/README.md`, examine `core/nvbit.h` for API documentation, or report issues at the GitHub repository.
 
-## Additional Resources
-
-Before asking for help:
-1. Try with `TOOL_VERBOSE=1` to get diagnostic output
-2. Verify your setup meets all requirements in [Prerequisites](#prerequisites)
-3. Test with provided test applications first
+Before asking for help, try with `TOOL_VERBOSE=1` to get diagnostic output, verify your setup meets all requirements in [Prerequisites](#prerequisites), and test with provided test applications first.
 
 ## Contributing
 
-We welcome contributions to improve the tutorial! If you find issues or have suggestions:
-
-1. Open an issue describing the problem or enhancement
-2. Submit a pull request with your proposed changes
-3. Follow the coding style of the existing examples
+We welcome contributions to improve the tutorial! If you find issues or have suggestions, open an issue describing the problem or enhancement, submit a pull request with your proposed changes, and follow the coding style of the existing examples.
 
 ## Further Resources
 
