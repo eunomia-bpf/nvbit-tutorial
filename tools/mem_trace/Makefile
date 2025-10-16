@@ -73,10 +73,10 @@ NVBIT_TOOL=$(current_dir).so
 all: $(NVBIT_TOOL)
 
 $(NVBIT_TOOL): $(OBJECTS) $(NVBIT_PATH)/libnvbit.a
-	$(NVCC) -arch=$(ARCH) $(NVCC_OPT) $(OBJECTS) $(LIBS) $(NVCC_PATH) -lcuda -lcudart_static -shared -o $@
+	g++ -shared -fPIC $(OBJECTS) $(LIBS) $(NVCC_PATH) -lcuda -lcudart_static -lpthread -ldl -o $@
 
 %.o: %.cu
-	$(NVCC) -dc -c -std=c++11 $(INCLUDES) -Xptxas -cloning=no -Xcompiler -Wall -arch=$(ARCH) $(NVCC_OPT) -Xcompiler -fPIC $< -o $@
+	$(NVCC) -c -std=c++11 $(INCLUDES) -Xptxas -cloning=no -Xcompiler -Wall $(NVCC_OPT) -Xcompiler -fPIC $< -o $@
 
 inject_funcs.o: inject_funcs.cu
 	$(NVCC) $(INCLUDES) $(MAXRREGCOUNT_FLAG) -Xptxas -astoolspatch --keep-device-functions -arch=$(ARCH) -Xcompiler -Wall -Xcompiler -fPIC -c $< -o $@

@@ -774,17 +774,17 @@
     ACTION( CTK5427,       740,   cuLibraryEnumerateKernels,                   0)        \
     ACTION( CTK5427,       741,   cuFuncIsLoaded,                              0)        \
     ACTION( CTK5427,       742,   cuFuncLoad,                                  0)        \
-    ACTION( CTK3375,       743,   cuGreenCtxCreate,                            0)        \
-    ACTION( CTK3375,       744,   cuGreenCtxDestroy,                           0)        \
-    ACTION( CTK3375,       745,   cuDeviceGetDevResource,                      0)        \
-    ACTION( CTK3375,       746,   cuCtxGetDevResource,                         0)        \
-    ACTION( CTK3375,       747,   cuGreenCtxGetDevResource,                    0)        \
-    ACTION( CTK3375,       748,   cuDevResourceGenerateDesc,                   0)        \
-    ACTION( CTK3375,       749,   cuGreenCtxRecordEvent,                       0)        \
-    ACTION( CTK3375,       750,   cuGreenCtxWaitEvent,                         0)        \
-    ACTION( CTK3375,       751,   cuDevSmResourceSplitByCount,                 0)        \
-    ACTION( CTK3375,       752,   cuStreamGetGreenCtx,                         0)        \
-    ACTION( CTK3375,       753,   cuCtxFromGreenCtx,                           0)        \
+    ACTION( cuda,          743,   cuGreenCtxCreate,                            0)        \
+    ACTION( cuda,          744,   cuGreenCtxDestroy,                           0)        \
+    ACTION( cuda,          745,   cuDeviceGetDevResource,                      0)        \
+    ACTION( cuda,          746,   cuCtxGetDevResource,                         0)        \
+    ACTION( cuda,          747,   cuGreenCtxGetDevResource,                    0)        \
+    ACTION( cuda,          748,   cuDevResourceGenerateDesc,                   0)        \
+    ACTION( cuda,          749,   cuGreenCtxRecordEvent,                       0)        \
+    ACTION( cuda,          750,   cuGreenCtxWaitEvent,                         0)        \
+    ACTION( cuda,          751,   cuDevSmResourceSplitByCount,                 0)        \
+    ACTION( cuda,          752,   cuStreamGetGreenCtx,                         0)        \
+    ACTION( cuda,          753,   cuCtxFromGreenCtx,                           0)        \
     ACTION( cuda,          754,   cuKernelGetLibrary,                          0)        \
     ACTION( cuda,          755,   cuCtxRecordEvent,                            0)        \
     ACTION( cuda,          756,   cuCtxWaitEvent,                              0)        \
@@ -815,6 +815,29 @@
     ACTION( CTK6945,       781,   cuTensorMapEncodeIm2colWide,                 0)        \
     ACTION( CTK7666,       782,   cuGreenCtxGetId,                             0)        \
     ACTION( CTK7136,       783,   cuStreamCreateForCaptureToCig,               0)        \
+    ACTION( CTK5214,       784,   cuMemPrefetchBatchAsync,                     0)        \
+    ACTION( CTK5214,       785,   cuMemPrefetchBatchAsync_ptsz,                0)        \
+    ACTION( CTK7486,       786,   cuSemaphoreCreate,                           0)        \
+    ACTION( CTK7486,       787,   cuSemaphoreExport,                           0)        \
+    ACTION( CTK7486,       788,   cuSemaphoreDestroy,                          0)        \
+    ACTION( CTK5214,       789,   cuMemDiscardBatchAsync,                      0)        \
+    ACTION( CTK5214,       790,   cuMemDiscardBatchAsync_ptsz,                 0)        \
+    ACTION( CTK5214,       791,   cuMemDiscardAndPrefetchBatchAsync,           0)        \
+    ACTION( CTK5214,       792,   cuMemDiscardAndPrefetchBatchAsync_ptsz,      0)        \
+    ACTION( CTK7298,       793,   cuMultiKernelCooperativeDomainCreate,        0)        \
+    ACTION( CTK7298,       794,   cuMultiKernelCooperativeDomainDestroy,       0)        \
+    ACTION( CTK8438,       795,   cuCtxGetDevice_v2,                           0)        \
+    ACTION( CTK8457,       796,   cuMemcpyBatchAsync_v2,                       0)        \
+    ACTION( CTK8457,       797,   cuMemcpyBatchAsync_v2_ptsz,                  0)        \
+    ACTION( CTK8457,       798,   cuMemcpy3DBatchAsync_v2,                     0)        \
+    ACTION( CTK8457,       799,   cuMemcpy3DBatchAsync_v2_ptsz,                0)        \
+    ACTION( CTK8438,       800,   cuCtxSynchronize_v2,                         0)        \
+    ACTION( CTK7080,       801,   cuMemGetDefaultMemPool,                      0)        \
+    ACTION( CTK7080,       802,   cuMemGetMemPool,                             0)        \
+    ACTION( CTK7080,       803,   cuMemSetMemPool,                             0)        \
+    ACTION( CTK7560,       804,   cuDeviceGetP2PAtomicCapabilities,            0)        \
+    ACTION( CTK7560,       805,   cuDeviceGetHostAtomicCapabilities,           0)        \
+    ACTION( CTK8812,       806,   cuDriverGetGpuCodeIsaVersion,                0)        \
 
 #endif // file guard
 

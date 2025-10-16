@@ -79,6 +79,8 @@ used (i.e. nvcc, pgicc, etc).
 
 ## Getting Started with NVBit
 
+This repository uses **NVBit v1.7.6** which includes support for newer CUDA versions and SM architectures up to SM_120.
+
 NVBit is provided in this repository with the following structure:
 1. A ```core``` folder, which contains the main static library
 ```libnvbit.a``` and various headers files (among which the ```nvbit.h```
@@ -102,11 +104,12 @@ cd test-apps
 make
 ```
 
-**Note**: When creating your own tool, make sure you link it to the C++
-standard library, which is required by NVBit, otherwise, you might see
-missing symbol errors. ```nvcc``` does this by default, but if you specify
-your own host compiler using ```nvcc -ccbin=<compiler>```, you need to point
-to a C++ compiler or add ```-lstdc++```.
+**Important Notes for CUDA 12.x+**:
+- This repository has been updated to use **g++** for final linking instead of nvcc to avoid device linking issues with CUDA 12.8+
+- Test applications should use `-cudart shared` flag when compiling with nvcc
+- The Makefiles have been configured to handle these requirements automatically
+
+**Note**: When creating your own tool, make sure you link it with g++ and include the necessary CUDA libraries (`-lcuda -lcudart_static -lpthread -ldl`). The provided Makefiles show the correct pattern.
 
 ## Using an NVBit Tool
 

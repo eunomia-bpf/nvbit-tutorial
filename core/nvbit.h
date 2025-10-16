@@ -45,7 +45,7 @@
 #include "cuda.h"
 #include "generated_cuda_meta.h"
 
-#define NVBIT_VERSION "1.7.5"
+#define NVBIT_VERSION "1.7.6"
 
 /* Instruction class returned by the NVBit inspection API nvbit_get_instrs */
 class Instr {
@@ -214,6 +214,9 @@ const char* nvbit_get_func_name(CUcontext ctx, CUfunction f,
  * binary must be compiled with --generate-line-info   (-lineinfo) */
 bool nvbit_get_line_info(CUcontext cuctx, CUfunction cufunc, uint32_t offset,
                          char** file_name, char** dir_name, uint32_t* line);
+
+/* Dump the cubin of the given function */
+bool nvbit_dump_cubin(CUcontext cuctx, CUfunction cufunc, const char *filename);
 
 /* Get the SM family */
 uint32_t nvbit_get_sm_family(CUcontext cuctx);

@@ -23,12 +23,6 @@ Each tool typically consists of:
 
 ## Running the Tools
 
-All tools can be run by preloading them before your CUDA application:
-
-```bash
-LD_PRELOAD=/path/to/tool.so ./your_cuda_application
-```
-
 Or alternatively:
 
 ```bash
