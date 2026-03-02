@@ -21,6 +21,7 @@
 - [14. 扩展开发指南](#14-扩展开发指南)
 - [15. strace 实证分析](#15-strace-实证分析)
 - [16. 使用非 CUDA 语言编写 NVBit 工具](#16-使用非-cuda-语言编写-nvbit-工具)
+- [17. 实战 POC：手写 PTX 作为 NVBit 设备函数](#17-实战-poc手写-ptx-作为-nvbit-设备函数)
 
 ---
 
@@ -1679,3 +1680,357 @@ device 端: LLVM IR/Rust/eBPF → PTX → cubin (新方案)
 | **手写 PTX** | 高 | 高 | 完全支持 | 极致性能优化 |
 
 **推荐路线**：从 LLVM IR → PTX 路径起步，先实现一个最简单的 `count_instrs` 验证整条流水线。成功后可以接入任意 LLVM 前端语言，或者探索 eBPF 方案实现更动态的插桩。
+
+---
+
+## 17. 实战 POC：手写 PTX 作为 NVBit 设备函数
+
+> 本章记录了一个完整的 POC 实现：用手写 PTX 替代 CUDA C 编写 NVBit 的设备端插桩函数。
+> 包含完整的构建流水线、工作原理分析，以及开发过程中遇到的所有坑。
+>
+> POC 代码位于 `tools/ptx_instr_count/`。
+
+### 17.1 目标与动机
+
+NVBit 标准工具的设备函数（如 `count_instrs`）通常用 CUDA C 编写（`inject_funcs.cu`），由 nvcc 编译。但如果我们想使用 LLVM IR、eBPF、Rust 等非 CUDA 前端，第一步是验证：**NVBit 能否使用手写 PTX 代替 nvcc 编译的设备函数？**
+
+答案是可以的，但过程中有若干隐蔽的坑。
+
+### 17.2 构建流水线
+
+标准 NVBit 工具的构建：
+```
+inject_funcs.cu → nvcc (--keep-device-functions, -astoolspatch) → .o
+instr_count.cu → nvcc → .o
+两个 .o + libnvbit.a → g++ -shared → tool.so
+```
+
+PTX POC 的构建：
+```
+inject_funcs.ptx          (手写 PTX)
+    ↓ ptxas -astoolspatch -arch=sm_120
+inject_funcs.sm_120.cubin (已编译的 cubin)
+    ↓ fatbinary --create -64
+inject_funcs.fatbin       (含 cubin + PTX JIT 后备)
+    ↓ inject_funcs_embed.S (.incbin)
+inject_funcs_embed.o      (fatbin 数据嵌入 .nv_fatbin ELF section)
+    + inject_funcs_reg.cpp (host 注册桩，wrapper 在 .nvFatBinSegment)
+    + instr_count.cu       (host 端代码，nvcc 编译)
+    + libnvbit.a
+    ↓ g++ -shared
+ptx_instr_count.so
+```
+
+### 17.3 手写 PTX 设备函数
+
+以 `count_instrs` 为例，这是最核心的插桩函数。我们参考 nvcc 编译 `inject_funcs.cu` 产生的 PTX（通过 `nvcc --keep` 或 `-ptx` 获取 reference.ptx），然后手写等效的 PTX：
+
+```ptx
+.version 8.8
+.target sm_70
+.address_size 64
+
+.visible .func count_instrs(
+    .param .b32 count_instrs_param_0,   // num_instrs
+    .param .b32 count_instrs_param_1,   // count_warp_level
+    .param .b64 count_instrs_param_2    // pcounter
+)
+{
+    .reg .pred  %p<5>;
+    .reg .b32   %r<10>;
+    .reg .b64   %rd<6>;
+
+    ld.param.u32    %r2, [count_instrs_param_0];
+    ld.param.u32    %r3, [count_instrs_param_1];
+    ld.param.u64    %rd1, [count_instrs_param_2];
+
+    // 获取活跃 lane mask
+    activemask.b32 %r4;
+    mov.pred    %p1, -1;
+    vote.sync.ballot.b32    %r1, %p1, %r4;
+
+    // 获取 lane ID
+    mov.u32 %r5, %laneid;
+
+    // 找到第一个活跃 lane
+    brev.b32    %r6, %r1;
+    bfind.shiftamt.u32  %r7, %r6;
+
+    // 只有第一个活跃 lane 执行 atomic add
+    setp.ne.s32     %p3, %r7, %r5;
+    @%p3 bra    $L_done;
+
+    setp.eq.s32     %p4, %r3, 0;
+    @%p4 bra    $L_thread_level;
+
+    // Warp-level: atomicAdd(pcounter, num_instrs)
+    cvt.s64.s32     %rd2, %r2;
+    atom.add.u64    %rd3, [%rd1], %rd2;
+    bra.uni     $L_done;
+
+$L_thread_level:
+    // Thread-level: atomicAdd(pcounter, popc(active_mask) * num_instrs)
+    popc.b32    %r8, %r1;
+    mul.lo.s32  %r9, %r8, %r2;
+    cvt.s64.s32     %rd4, %r9;
+    atom.add.u64    %rd5, [%rd1], %rd4;
+
+$L_done:
+    ret;
+}
+```
+
+**关键点**：
+- 必须用 `.visible .func`（不是 `.entry`）—— 这是设备函数，不是 kernel
+- 函数名 `count_instrs` 必须与主机端 `nvbit_insert_call(i, "count_instrs", ...)` 一致
+- 参数命名格式 `count_instrs_param_N` 是 PTX 约定
+
+### 17.4 Host 端注册机制
+
+绕过 nvcc 后，我们需要手动完成 nvcc 通常自动生成的 fatbin 注册逻辑：
+
+```cpp
+// inject_funcs_reg.cpp
+
+// CUDA 内部注册 API（稳定 ABI，不在公开头文件中）
+extern "C" {
+    void** __cudaRegisterFatBinary(void*);
+    void __cudaRegisterFatBinaryEnd(void**);
+    void __cudaUnregisterFatBinary(void**);
+}
+
+// 从 inject_funcs_embed.S 来的符号
+extern "C" {
+    extern unsigned char _inject_funcs_fatbin_data[]
+        __attribute__((visibility("hidden")));
+}
+
+// CUDA fatbin wrapper (magic = 0x466243B1)
+struct __fatBinC_Wrapper_t {
+    int magic;
+    int version;
+    const void* data;
+    void* filename_or_fatbins;
+};
+
+// 必须放在 .nvFatBinSegment section！（见踩坑记录）
+static __fatBinC_Wrapper_t __fatDeviceText
+    __attribute__((aligned(8), section(".nvFatBinSegment"))) = {
+    0x466243B1, 1,
+    _inject_funcs_fatbin_data,
+    nullptr
+};
+
+// .so 加载时注册
+__attribute__((constructor))
+static void __cuda_register_inject_funcs() {
+    auto handle = __cudaRegisterFatBinary(&__fatDeviceText);
+    if (handle) __cudaRegisterFatBinaryEnd(handle);
+}
+```
+
+### 17.5 开发踩坑记录
+
+#### 坑 1：ptxas 不接受非 ASCII 字符
+
+**现象**：
+```
+ptxas fatal   : Unexpected non-ASCII character encountered on line 1
+ptxas fatal   : Unexpected non-ASCII character encountered on line 13
+```
+
+**原因**：PTX 注释中使用了 UTF-8 编码的 em-dash 字符（`—`，编码为 `0xe2 0x80 0x94`）。ptxas 严格要求整个文件为纯 ASCII。
+
+**解决**：将所有 `—` 替换为 ASCII 的 `-`。
+
+**教训**：PTX 文件必须是纯 ASCII 编码，即使是注释中也不允许出现任何非 ASCII 字符。编写 PTX 时建议设置编辑器编码为 ASCII。
+
+#### 坑 2：xxd 嵌入方式无法被 cuobjdump 发现
+
+**现象**：
+```
+cuobjdump info : No ELF file found to extract from 'ptx_instr_count.so'
+ASSERT FAIL: function.cpp:792: instrumentation function count_instrs not found in binary!
+```
+
+**尝试的方案**（失败）：
+```makefile
+# 用 xxd 将 fatbin 转为 C 字节数组
+xxd -i inject_funcs.fatbin > inject_funcs_fatbin.h
+```
+```cpp
+// inject_funcs_reg.cpp
+#include "inject_funcs_fatbin.h"
+// 数组被放入 .rodata section
+```
+
+**原因**：NVBit 启动时运行 `cuobjdump -xelf all <tool.so>` 来提取设备代码。cuobjdump 不会扫描 `.rodata`，它只查找 `.nv_fatbin` ELF section 中的 fatbin 数据。用 xxd 生成的 C 数组会被编译到 `.rodata`，cuobjdump 完全看不到。
+
+**关键发现**：通过 `readelf -S` 对比正常工作的 `instr_count_bb.so` 和我们的 .so，发现正常工具有以下特殊 ELF section：
+```
+[15] __nv_module_id    PROGBITS
+[16] .nv_fatbin        PROGBITS    ← cuobjdump 在这里找 fatbin 数据
+[28] .nvFatBinSegment  PROGBITS    ← cuobjdump 在这里找 fatbin wrapper 指针
+```
+
+#### 坑 3：objcopy 嵌入到 .nv_fatbin 仍然不够
+
+**尝试的方案**（部分有效）：
+```makefile
+objcopy -I binary -O elf64-x86-64 \
+    --rename-section .data=.nv_fatbin,alloc,load,readonly,data \
+    inject_funcs.fatbin inject_funcs_fatbin.o
+```
+
+**现象**：fatbin 数据确实出现在 `.nv_fatbin` section 中（通过 `objdump -s -j .nv_fatbin` 可验证 magic number `0xBA55ED50` 存在），但 cuobjdump 仍然找不到。
+
+**原因**：cuobjdump 不是直接扫描 `.nv_fatbin` section 找 magic number。它通过 `.nvFatBinSegment` section 中的 `__fatBinC_Wrapper_t` 结构体里的 **data 指针** 来定位 fatbin。我们的 wrapper 没有放在 `.nvFatBinSegment` 中。
+
+#### 坑 4：wrapper 放入 .nvFatBinSegment 但指针重定位类型错误
+
+**尝试的方案**（仍然失败）：
+```cpp
+static __fatBinC_Wrapper_t __fatDeviceText
+    __attribute__((aligned(8), section(".nvFatBinSegment"))) = {
+    0x466243B1, 1,
+    _binary_inject_funcs_fatbin_start,  // objcopy 生成的 extern 符号
+    nullptr
+};
+```
+
+**现象**：`.nvFatBinSegment` 中现在有了 2 个 wrapper entry（一个来自 libnvbit.a，一个是我们的），但 cuobjdump 仍然只找到 libnvbit 的 sm_52 cubin。
+
+**深层原因（通过 readelf -r 分析）**：
+
+```
+# libnvbit 的 wrapper data 指针：
+000000210fa0  R_X86_64_RELATIVE    17ae50    ← cuobjdump 能处理
+
+# 我们的 wrapper data 指针：
+000000210fb8  R_X86_64_64          _binary_inject_funcs_fatbin_start + 0  ← cuobjdump 无法处理！
+```
+
+cuobjdump 是一个静态分析工具，它不运行动态链接器。它能处理 `R_X86_64_RELATIVE` 重定位（只需要加上基地址），但无法处理 `R_X86_64_64` 重定位（需要符号解析）。
+
+`objcopy` 生成的 `_binary_*_start` 符号是全局可见的外部符号，链接器为其生成的是 `R_X86_64_64` 重定位。而 nvcc 编译的代码中，fatbin 数据和 wrapper 在同一编译单元内，编译器直接引用，链接器生成 `R_X86_64_RELATIVE`。
+
+#### 坑 4 的解决：用汇编 `.incbin` + hidden visibility
+
+**最终方案**：创建一个汇编文件 `inject_funcs_embed.S`，用 `.incbin` 指令嵌入 fatbin，并标记为 hidden visibility：
+
+```asm
+    .section .nv_fatbin, "a", @progbits
+    .align 8
+    .globl _inject_funcs_fatbin_data
+    .hidden _inject_funcs_fatbin_data
+    .type _inject_funcs_fatbin_data, @object
+_inject_funcs_fatbin_data:
+    .incbin "inject_funcs.fatbin"
+    .size _inject_funcs_fatbin_data, . - _inject_funcs_fatbin_data
+```
+
+然后在 `inject_funcs_reg.cpp` 中引用时也标记 hidden：
+```cpp
+extern "C" {
+    extern unsigned char _inject_funcs_fatbin_data[]
+        __attribute__((visibility("hidden")));
+}
+```
+
+**为什么这样有效**：hidden visibility 告诉链接器这个符号不会被运行时替换（不需要符号插入），因此链接器生成 `R_X86_64_RELATIVE` 而不是 `R_X86_64_64`：
+
+```
+# 修复后：
+000000210fb8  R_X86_64_RELATIVE    17c318    ← cuobjdump 可以处理了！
+```
+
+**验证**：
+```bash
+$ cuobjdump -xelf all ptx_instr_count.so
+Extracting ELF file    1: ptx_instr_count.1.sm_52.cubin    # libnvbit
+Extracting ELF file    2: ptx_instr_count.2.sm_120.cubin   # 我们的手写 PTX！
+```
+
+### 17.6 cuobjdump 如何发现设备代码（逆向总结）
+
+通过上述踩坑过程，我们逆向出了 cuobjdump 发现设备代码的完整流程：
+
+```
+cuobjdump -xelf all tool.so
+    │
+    ├── 1. 读取 ELF section headers
+    │       找到 .nvFatBinSegment section
+    │
+    ├── 2. 读取 .rela.dyn 重定位表
+    │       只处理 R_X86_64_RELATIVE 类型
+    │       （无法处理 R_X86_64_64 符号重定位）
+    │
+    ├── 3. 遍历 .nvFatBinSegment 中的 __fatBinC_Wrapper_t
+    │       每个 wrapper 24 字节：
+    │       ┌─────────┬─────────┬──────────────┬──────────────┐
+    │       │ magic   │ version │ data pointer │ filename_ptr │
+    │       │ 4 bytes │ 4 bytes │  8 bytes     │  8 bytes     │
+    │       └─────────┴─────────┴──────────────┴──────────────┘
+    │       验证 magic == 0x466243B1
+    │       应用 RELATIVE 重定位修正 data pointer
+    │
+    ├── 4. 跟随 data pointer 到 .nv_fatbin section
+    │       验证 fatbin magic == 0xBA55ED50
+    │       解析 fatbin 内部的 cubin/PTX 记录
+    │
+    └── 5. 提取每个 cubin（ELF 格式的 SASS 代码）
+```
+
+**关键约束**：
+- wrapper 必须在 `.nvFatBinSegment` section
+- fatbin 数据必须在 `.nv_fatbin` section
+- wrapper 中的 data pointer 必须通过 `R_X86_64_RELATIVE` 重定位可解析
+- 使用 `R_X86_64_64`（符号重定位）会导致 cuobjdump 看到 data pointer 为 0，从而跳过该 fatbin
+
+### 17.7 关键 ELF Section 对比
+
+| Section | 来源 | 作用 |
+|---------|------|------|
+| `.nv_fatbin` | nvcc 或 objcopy/asm `.incbin` | 存储 fatbin 原始数据 |
+| `.nvFatBinSegment` | nvcc 或手动 `section` 属性 | 存储 `__fatBinC_Wrapper_t` 指针结构 |
+| `__nv_module_id` | nvcc（可选） | 模块标识，缺少也能工作 |
+| `__nv_managed_init_offsets` | nvcc（`__managed__` 变量）| managed 变量初始化 |
+
+### 17.8 验证结果
+
+用 vectoradd 测试，手写 PTX 版本与原始 CUDA C 版本输出完全一致：
+
+```
+# Warp-level counting (COUNT_WARP_LEVEL=1, 默认)
+原版 instr_count_bb: kernel instructions 62588, total instructions 62588
+PTX poc:             kernel instructions 62588, total instructions 62588
+
+# Thread-level counting (COUNT_WARP_LEVEL=0)
+原版 instr_count_bb: kernel instructions 2002816, total instructions 2002816
+PTX poc:             kernel instructions 2002816, total instructions 2002816
+```
+
+### 17.9 踩坑清单（速查）
+
+| # | 问题 | 错误信息 | 根因 | 解决 |
+|---|------|---------|------|------|
+| 1 | PTX 非 ASCII | `ptxas fatal: Unexpected non-ASCII character` | 注释中有 UTF-8 字符 | PTX 全文件必须纯 ASCII |
+| 2 | xxd 嵌入 | `No ELF file found to extract` | fatbin 在 .rodata 而非 .nv_fatbin | 需要放入 .nv_fatbin section |
+| 3 | objcopy 嵌入 | 同上 | wrapper 不在 .nvFatBinSegment | wrapper 加 `section(".nvFatBinSegment")` |
+| 4 | 重定位类型 | cuobjdump 只找到 libnvbit 的 cubin | `R_X86_64_64` vs `R_X86_64_RELATIVE` | asm `.incbin` + `hidden` visibility |
+
+### 17.10 对非 CUDA 前端的指导意义
+
+这个 POC 证明了：**NVBit 设备函数完全可以脱离 nvcc 编译**。只要满足以下条件：
+
+1. **PTX 或 cubin 通过 `ptxas -astoolspatch` 编译**
+2. **fatbin 数据嵌入 `.nv_fatbin` ELF section**
+3. **wrapper 结构体放入 `.nvFatBinSegment` section**
+4. **data pointer 使用 `R_X86_64_RELATIVE` 重定位**（hidden visibility）
+5. **运行时通过 `__cudaRegisterFatBinary()` 注册**
+
+满足这些条件后，设备代码可以来自任何来源：
+- **LLVM IR**：`llc -march=nvptx64` → PTX → 同样的流水线
+- **Rust**：`rustc --target nvptx64-nvidia-cuda` → PTX
+- **手写 PTX**：直接编写（本 POC 的方式）
+- **运行时生成**：动态生成 PTX 字符串 → ptxas → fatbin → 注册
